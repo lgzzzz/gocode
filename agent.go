@@ -63,9 +63,7 @@ func (a *Agent) Run(ctx context.Context, userMessage string, cb func(string)) (s
 		},
 	}
 
-	const maxIter = 30
-
-	for iter := 0; iter < maxIter; iter++ {
+	for {
 		resp, err := a.client.CreateChatCompletion(ctx, openai.ChatCompletionRequest{
 			Model:    a.model,
 			Messages: messages,
@@ -128,7 +126,6 @@ func (a *Agent) Run(ctx context.Context, userMessage string, cb func(string)) (s
 		return content, nil
 	}
 
-	return "", fmt.Errorf("max iterations (%d) reached without final answer", maxIter)
 }
 
 func (a *Agent) systemPrompt() string {
