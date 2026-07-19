@@ -1,4 +1,4 @@
-package main
+package agent
 
 import (
 	"context"
@@ -6,6 +6,8 @@ import (
 	"os"
 
 	openai "github.com/sashabaranov/go-openai"
+
+	"github.com/lgzzzz/gocode/internal/tools"
 )
 
 // Agent implements a ReAct-style loop using OpenAI-compatible function calling.
@@ -13,11 +15,11 @@ type Agent struct {
 	client  *openai.Client
 	model   string
 	tools   []openai.Tool
-	toolMap map[string]ToolExecutor
+	toolMap map[string]tools.ToolExecutor
 	cwd     string
 }
 
-func NewAgent(apiKey, model, baseURL string) *Agent {
+func New(apiKey, model, baseURL string) *Agent {
 	if baseURL == "" {
 		baseURL = "https://api.deepseek.com"
 	}
@@ -25,7 +27,7 @@ func NewAgent(apiKey, model, baseURL string) *Agent {
 	cfg.BaseURL = baseURL
 	client := openai.NewClientWithConfig(cfg)
 
-	tm, defs := allTools()
+	tm, defs := tools.AllTools()
 
 	var oaiTools []openai.Tool
 	for _, d := range defs {
@@ -125,7 +127,6 @@ func (a *Agent) Run(ctx context.Context, userMessage string, cb func(string)) (s
 		cb("🤖 " + content)
 		return content, nil
 	}
-
 }
 
 func (a *Agent) systemPrompt() string {

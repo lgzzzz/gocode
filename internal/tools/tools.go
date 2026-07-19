@@ -1,4 +1,4 @@
-package main
+package tools
 
 import (
 	"encoding/json"
@@ -13,6 +13,13 @@ import (
 type ToolExecutor interface {
 	Execute(argsJSON string) (string, error)
 	Name() string
+}
+
+// ToolDef describes a tool for OpenAI function calling.
+type ToolDef struct {
+	Name        string
+	Description string
+	Parameters  any
 }
 
 // ---- read tool ----
@@ -149,14 +156,13 @@ func (t *BashTool) Execute(argsJSON string) (string, error) {
 	if args.Timeout > 0 {
 		timeout = args.Timeout
 	}
-	ctx := exec.Command("bash", "-c", args.Command)
-	// Simple timeout via context is fine, but we'll just use a wrapper.
+	cmd := exec.Command("bash", "-c", args.Command)
 	var out strings.Builder
-	ctx.Stdout = &out
-	ctx.Stderr = &out
+	cmd.Stdout = &out
+	cmd.Stderr = &out
 
 	done := make(chan error, 1)
-	go func() { done <- ctx.Run() }()
+	go func() { done <- cmd.Run() }()
 
 	select {
 	case err := <-done:
@@ -172,8 +178,8 @@ func (t *BashTool) Execute(argsJSON string) (string, error) {
 		}
 		return result, nil
 	case <-time.After(time.Duration(timeout) * time.Second):
-		if ctx.Process != nil {
-			ctx.Process.Kill()
+		if cmd.Process != nil {
+			cmd.Process.Kill()
 		}
 		return fmt.Sprintf("(timed out after %ds)\n%s", timeout, out.String()), nil
 	}
@@ -188,22 +194,15 @@ func dirOf(path string) string {
 	return "."
 }
 
-// ---- tool definitions for OpenAI function calling ----
-
-type toolDef struct {
-	Name        string
-	Description string
-	Parameters  any
-}
-
-func allTools() (map[string]ToolExecutor, []toolDef) {
+// AllTools returns a map of tool executors and their OpenAI function definitions.
+func AllTools() (map[string]ToolExecutor, []ToolDef) {
 	tools := map[string]ToolExecutor{
 		"read":  &ReadTool{},
 		"write": &WriteTool{},
 		"edit":  &EditTool{},
 		"bash":  &BashTool{},
 	}
-	defs := []toolDef{
+	defs := []ToolDef{
 		{
 			Name:        "read",
 			Description: "Read contents of a text file. Returns file content as text.",
