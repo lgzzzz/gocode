@@ -15,11 +15,13 @@ type ToolExecutor interface {
 	Name() string
 }
 
-// ToolDef describes a tool for OpenAI function calling.
+// ToolDef describes a tool for OpenAI function calling and system prompt generation.
 type ToolDef struct {
-	Name        string
-	Description string
-	Parameters  any
+	Name             string
+	Description      string
+	Parameters       any
+	PromptSnippet    string   // one-line description for the system prompt tool list
+	PromptGuidelines []string // guidelines added to system prompt when tool is available
 }
 
 // ---- read tool ----
@@ -204,8 +206,10 @@ func AllTools() (map[string]ToolExecutor, []ToolDef) {
 	}
 	defs := []ToolDef{
 		{
-			Name:        "read",
-			Description: "Read contents of a text file. Returns file content as text.",
+			Name:            "read",
+			Description:     "Read contents of a text file. Returns file content as text.",
+			PromptSnippet:   "Read file contents",
+			PromptGuidelines: []string{"Before making changes, use read to understand existing code"},
 			Parameters: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
@@ -217,8 +221,10 @@ func AllTools() (map[string]ToolExecutor, []ToolDef) {
 			},
 		},
 		{
-			Name:        "write",
-			Description: "Create or overwrite a file with the given content. Creates parent directories as needed.",
+			Name:            "write",
+			Description:     "Create or overwrite a file with the given content. Creates parent directories as needed.",
+			PromptSnippet:   "Create or overwrite files",
+			PromptGuidelines: []string{"Use write only for new files or complete rewrites"},
 			Parameters: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
@@ -229,12 +235,17 @@ func AllTools() (map[string]ToolExecutor, []ToolDef) {
 			},
 		},
 		{
-			Name:        "edit",
-			Description: "Edit a file by replacing an exact text match with new text. oldText must be unique in the file.",
+			Name:            "edit",
+			Description:     "Edit a file by replacing an exact text match with new text. oldText must be unique in the file.",
+			PromptSnippet:   "Make precise text replacements in files",
+			PromptGuidelines: []string{
+				"Use edit for precise, small changes; use write only for new files or complete rewrites",
+				"When edit fails because oldText is not unique, read the file around the target area and try again with more context",
+			},
 			Parameters: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
-					"path":    map[string]any{"type": "string", "description": "Path to the file to edit"},
+					"path":    map[string]any{"type": "string", "description": "Path to the file to edit (relative or absolute)"},
 					"oldText": map[string]any{"type": "string", "description": "Exact text to find and replace (must be unique in the file)"},
 					"newText": map[string]any{"type": "string", "description": "Replacement text"},
 				},
@@ -242,8 +253,10 @@ func AllTools() (map[string]ToolExecutor, []ToolDef) {
 			},
 		},
 		{
-			Name:        "bash",
-			Description: "Execute a bash command in the current working directory. Returns stdout and stderr combined.",
+			Name:            "bash",
+			Description:     "Execute a bash command in the current working directory. Returns stdout and stderr combined.",
+			PromptSnippet:   "Execute shell commands",
+			PromptGuidelines: []string{"Use bash for commands like ls, grep, find, go build, go test, git, etc."},
 			Parameters: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
