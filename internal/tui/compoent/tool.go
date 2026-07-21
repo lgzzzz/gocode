@@ -36,10 +36,13 @@ func NewToolMessage(id, name, args string) *ToolMessage {
 }
 
 // SetResult updates the tool message with the execution result.
-// If result starts with "Error:", state transitions to ToolStateError.
+// If the result indicates an error (e.g. starts with "Error:", "exit ",
+// or "(timed out"), state transitions to ToolStateError.
 func (m *ToolMessage) SetResult(result string) {
 	m.Result = result
-	if strings.HasPrefix(result, "Error:") {
+	if strings.HasPrefix(result, "Error:") ||
+		strings.HasPrefix(result, "exit ") ||
+		strings.HasPrefix(result, "(timed out") {
 		m.State = ToolStateError
 	} else {
 		m.State = ToolStateSuccess
@@ -66,7 +69,11 @@ func (m *ToolMessage) Render(width int) string {
 		content += "\n" + strings.Join(lines, "\n")
 	}
 
-	return toolStyle.Width(width - 1).Render(content)
+	style := toolStyle
+	if m.State == ToolStateError {
+		style = toolErrorStyle
+	}
+	return style.Width(width - 1).Render(content)
 }
 
 func truncateStr(s string, max int) string {

@@ -42,6 +42,10 @@ var (
 	toolStyle = leftBar("10"). // green
 			Foreground(lipgloss.Color("10"))
 
+	// toolErrorStyle — red "┃" bar for tool execution errors
+	toolErrorStyle = leftBar("9"). // red
+			Foreground(lipgloss.Color("9"))
+
 	// errorStyle — red "┃" bar + bold
 	errorStyle = leftBar("9"). // red
 			Foreground(lipgloss.Color("9")).
