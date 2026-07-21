@@ -11,7 +11,7 @@ func renderTrim(style lipgloss.Style, width int, content string) string {
 	if strings.TrimSpace(content) == "" {
 		return ""
 	}
-	return strings.TrimRight(style.Width(width).Render(content), "\n")
+	return strings.TrimSpace(style.Width(width).Render(content))
 }
 
 // ---- Modern Left Accent Bar Styles ----
