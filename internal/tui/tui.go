@@ -71,7 +71,7 @@ func NewModel(ag *agent.Agent) tea.Model {
 }
 
 func (m model) Init() tea.Cmd {
-	return textarea.Blink
+	return nil
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -325,6 +325,7 @@ func (m *model) adjustInputHeight() {
 }
 
 func (m *model) updateViewport() {
+	atBottom := m.viewport.AtBottom()
 	var parts []string
 	for _, comp := range m.log {
 		rendered := comp.Render(m.viewport.Width)
@@ -337,7 +338,9 @@ func (m *model) updateViewport() {
 	m.viewport.SetContent(content)
 
 	if content != m.lastContent {
-		m.viewport.GotoBottom()
+		if atBottom {
+			m.viewport.GotoBottom()
+		}
 		m.lastContent = content
 	}
 }
