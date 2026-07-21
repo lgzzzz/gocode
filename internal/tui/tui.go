@@ -43,10 +43,8 @@ type model struct {
 
 // NewModel creates a new TUI model.
 func NewModel(ag *agent.Agent) tea.Model {
-	// Get current terminal dimensions.
 	width, height, err := term.GetSize(os.Stdout.Fd())
 	if err != nil {
-		// Fall back to sensible defaults if we can't detect the terminal size.
 		width, height = 80, 24
 	}
 
@@ -54,20 +52,17 @@ func NewModel(ag *agent.Agent) tea.Model {
 	ta.Placeholder = "Describe your coding task..."
 	ta.Focus()
 	ta.ShowLineNumbers = false
-	ta.Prompt = ""
-	ta.CharLimit = 0
-	ta.SetHeight(1)
-	ta.MaxHeight = 3
+	vp := viewport.New(0, 0) // account for input area and padding
 
-	vp := viewport.New(width-2, height-4) // account for input area and padding
-
-	return model{
+	m := model{
 		input:    ta,
 		viewport: vp,
 		agent:    ag,
 		width:    width,
 		height:   height,
 	}
+	m.adjustInputHeight()
+	return m
 }
 
 func (m model) Init() tea.Cmd {
@@ -99,11 +94,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-		m.input.SetWidth(msg.Width - 4) // account for left bar + padding
-		m.viewport.Width = msg.Width - 2
-		// Dynamic viewport height: total height minus input area height minus padding.
-		inputReserved := m.input.Height() + 2
-		m.viewport.Height = msg.Height - inputReserved
 
 	case tea.KeyMsg:
 		switch msg.Type {
@@ -233,26 +223,17 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmds = append(cmds, waitCmd(m.ch))
 		}
 	}
-
 	return m, tea.Batch(cmds...)
 }
 
 func (m *model) adjustInputHeight() {
-	lines := m.input.LineCount()
-	h := 1
-	if lines > 1 {
-		h = lines
-	}
-	if h > 3 {
-		h = 3
-	}
-	m.input.SetHeight(h)
-
+	m.input.SetHeight(1)
+	m.input.SetWidth(m.width - 2)
 	// Dynamically adjust viewport height when input height changes.
 	if m.height > 0 {
 		// Reserve space for input area: input height + 2 for padding/border.
-		inputReserved := h + 2
-		m.viewport.Height = m.height - inputReserved
+		m.viewport.Height = m.height - 2
+		m.viewport.Width = m.width - 2
 	}
 }
 
@@ -265,7 +246,7 @@ func (m *model) updateViewport() {
 			parts = append(parts, "") // spacing between cards
 		}
 	}
-	m.viewport.SetContent(strings.Join(parts, "\n"))
+	m.viewport.SetContent(strings.TrimSpace(strings.Join(parts, "\n")))
 	m.viewport.GotoBottom()
 }
 
@@ -278,13 +259,14 @@ func (m model) View() string {
 	if m.running {
 		inputArea = inputBarDimStyle.Render("⏳ Processing... (please wait)")
 	} else {
-		inputArea = renderInputBox(m.input)
+		inputArea = m.input.View()
 	}
 
 	// Put input area inside the viewport at the bottom
 	vpContent := m.viewport.View()
 	return lipgloss.JoinVertical(lipgloss.Left,
 		vpContent,
+		"",
 		inputArea,
 	)
 }
@@ -321,26 +303,6 @@ var (
 				PaddingLeft(1).
 				Foreground(lipgloss.Color("8"))
 )
-
-// renderInputBox renders the textarea with a left accent bar (no border).
-func renderInputBox(ta textarea.Model) string {
-	content := ta.View()
-	overflow := ta.LineCount() - ta.Height()
-
-	result := inputBarStyle.Render(content)
-
-	if overflow > 0 {
-		label := fmt.Sprintf(" %d more lines ", overflow)
-		if overflow == 1 {
-			label = " 1 more line "
-		}
-		result += "\n" + inputBarDimStyle.Render(label)
-	}
-
-	return result
-}
-
-// ---- channel wait command ----
 
 func waitCmd(ch chan progressMsg) tea.Cmd {
 	return func() tea.Msg {

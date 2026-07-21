@@ -42,7 +42,7 @@ type Agent struct {
 	client   *openai.Client
 	model    string
 	tools    []openai.Tool
-	toolDefs []tools.ToolDef             // tool definitions for system prompt generation
+	toolDefs []tools.ToolDef // tool definitions for system prompt generation
 	toolMap  map[string]tools.ToolExecutor
 	cwd      string
 	history  []openai.ChatCompletionMessage // conversation history
@@ -311,44 +311,65 @@ func (a *Agent) ClearHistory() {
 }
 
 // systemPrompt builds the system prompt dynamically from the available tool definitions,
-// similar to how pi constructs its prompt from tool metadata.
+// matching the structure and style of pi's system prompt construction.
 func (a *Agent) systemPrompt() string {
 	var sb strings.Builder
 
-	sb.WriteString("You are an AI coding agent that helps users with programming tasks. ")
-	sb.WriteString("You operate in a ReAct (Reasoning + Acting) loop: think about what to do, use tools to act, observe results, and iterate.\n\n")
+	// Opening line — matches pi's tone
+	sb.WriteString(`You are an expert coding assistant operating inside gocode, a coding agent harness.
+You help users by reading files, executing commands, editing code, and writing new files.`)
 
-	// Build the tool list from tool definitions
-	sb.WriteString("You have access to the following tools:\n")
+	// Build the tool list from tool definitions using one-line snippets (matching pi's style)
+	sb.WriteString("Available tools:\n")
 	for _, t := range a.tools {
 		if t.Function == nil {
 			continue
 		}
-		sb.WriteString(fmt.Sprintf("- %s: %s\n", t.Function.Name, t.Function.Description))
+		// Look up the ToolDef to get the PromptSnippet
+		snippet := t.Function.Description // fallback to full description
+		for _, d := range a.toolDefs {
+			if d.Name == t.Function.Name && d.PromptSnippet != "" {
+				snippet = d.PromptSnippet
+				break
+			}
+		}
+		sb.WriteString(fmt.Sprintf("- %s: %s\n", t.Function.Name, snippet))
 	}
 
-	// Collect guidelines from tool definitions and add common ones
 	sb.WriteString("\nGuidelines:\n")
-	guidelineNum := 1
+	seen := make(map[string]bool)
 	for _, t := range a.tools {
 		if t.Function == nil {
 			continue
 		}
-		// Look up the ToolDef to get PromptGuidelines
 		for _, d := range a.toolDefs {
 			if d.Name == t.Function.Name {
 				for _, g := range d.PromptGuidelines {
-					sb.WriteString(fmt.Sprintf("%d. %s\n", guidelineNum, g))
-					guidelineNum++
+					g = strings.TrimSpace(g)
+					if g != "" && !seen[g] {
+						seen[g] = true
+						sb.WriteString(fmt.Sprintf("- %s\n", g))
+					}
 				}
 				break
 			}
 		}
 	}
-	sb.WriteString(fmt.Sprintf("%d. Work step by step: think → act → observe → decide\n", guidelineNum))
-	guidelineNum++
-	sb.WriteString(fmt.Sprintf("%d. Be concise. When done, summarize what you accomplished.\n", guidelineNum))
 
+	// Common guidelines — always appended, matching pi
+	addCommonGuideline := func(g string) {
+		g = strings.TrimSpace(g)
+		if g != "" && !seen[g] {
+			seen[g] = true
+			sb.WriteString(fmt.Sprintf("- %s\n", g))
+		}
+	}
+	addCommonGuideline("Work step by step: think → act → observe → decide")
+	addCommonGuideline("Be concise. When done, summarize what you accomplished.")
+	addCommonGuideline("Be concise in your responses")
+	addCommonGuideline("Show file paths clearly when working with files")
+
+	// Current working directory
 	sb.WriteString(fmt.Sprintf("\nCurrent working directory: %s", a.cwd))
 
 	return sb.String()

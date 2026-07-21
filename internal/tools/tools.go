@@ -209,7 +209,7 @@ func AllTools() (map[string]ToolExecutor, []ToolDef) {
 			Name:            "read",
 			Description:     "Read contents of a text file. Returns file content as text.",
 			PromptSnippet:   "Read file contents",
-			PromptGuidelines: []string{"Before making changes, use read to understand existing code"},
+			PromptGuidelines: []string{"Use read to examine files instead of cat or sed."},
 			Parameters: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
@@ -255,7 +255,7 @@ func AllTools() (map[string]ToolExecutor, []ToolDef) {
 		{
 			Name:            "bash",
 			Description:     "Execute a bash command in the current working directory. Returns stdout and stderr combined.",
-			PromptSnippet:   "Execute shell commands",
+			PromptSnippet:   "Execute bash commands (ls, grep, find, etc.)",
 			PromptGuidelines: []string{"Use bash for commands like ls, grep, find, go build, go test, git, etc."},
 			Parameters: map[string]any{
 				"type": "object",
