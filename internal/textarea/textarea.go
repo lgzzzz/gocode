@@ -11,11 +11,11 @@ import (
 	"github.com/charmbracelet/bubbles/cursor"
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/runeutil"
-	"github.com/lgzzzz/gocode/internal/textarea/memoization"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
+	"github.com/lgzzzz/gocode/internal/textarea/memoization"
 	rw "github.com/mattn/go-runewidth"
 	"github.com/rivo/uniseg"
 )
@@ -473,6 +473,21 @@ func (m *Model) LineCount() int {
 	return len(m.value)
 }
 
+// WrappedLineCount returns the total number of display lines the textarea
+// content occupies, accounting for soft-wrapping at the current width.
+// This is useful for determining how tall the textarea needs to be to
+// show all content without internal scrolling.
+func (m Model) WrappedLineCount() int {
+	count := 0
+	for _, line := range m.value {
+		count += len(m.memoizedWrap(line, m.width))
+	}
+	if count == 0 {
+		return 1 // always at least one line (empty input)
+	}
+	return count
+}
+
 // Line returns the line position.
 func (m Model) Line() int {
 	return m.row
@@ -851,16 +866,38 @@ func (m Model) LineInfo() LineInfo {
 }
 
 // repositionView repositions the view of the viewport based on the defined
-// scrolling behavior.
+// scrolling behavior. It ensures:
+//   - The cursor line is always visible (unless content is empty).
+//   - The viewport never scrolls past the last display line, preventing
+//     empty lines from appearing at the bottom of the textarea.
+//   - When there are lines both above and below the cursor, the cursor is
+//     kept near the middle of the viewport.
 func (m *Model) repositionView() {
-	min := m.viewport.YOffset
-	max := min + m.viewport.Height - 1
+	totalLines := m.WrappedLineCount()
 
-	if row := m.cursorLineNumber(); row < min {
-		m.viewport.LineUp(min - row)
-	} else if row > max {
-		m.viewport.LineDown(row - max)
+	// If all content fits within the viewport, snap to top.
+	if totalLines <= m.viewport.Height {
+		if m.viewport.YOffset != 0 {
+			m.viewport.GotoTop()
+		}
+		return
 	}
+
+	maxYOffset := totalLines - m.viewport.Height
+	cursorLine := m.cursorLineNumber()
+
+	// Try to keep the cursor near the middle of the viewport.
+	idealYOffset := cursorLine - m.viewport.Height/2
+
+	// Clamp to valid range so we never scroll past the beginning or end.
+	if idealYOffset < 0 {
+		idealYOffset = 0
+	}
+	if idealYOffset > maxYOffset {
+		idealYOffset = maxYOffset
+	}
+
+	m.viewport.YOffset = idealYOffset
 }
 
 // Width returns the width of the textarea.
@@ -950,6 +987,9 @@ func (m *Model) SetHeight(h int) {
 		m.height = max(h, minHeight)
 		m.viewport.Height = max(h, minHeight)
 	}
+	// Height change may leave the viewport scrolled past the content;
+	// reposition to keep the cursor visible and prevent empty lines.
+	m.repositionView()
 }
 
 // Update is the Bubble Tea update loop.

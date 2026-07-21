@@ -7,11 +7,11 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
-	"github.com/lgzzzz/gocode/internal/textarea"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/term"
+	"github.com/lgzzzz/gocode/internal/textarea"
 
 	"github.com/lgzzzz/gocode/internal/agent"
 	"github.com/lgzzzz/gocode/internal/tui/compoent"
@@ -294,8 +294,12 @@ func (m *model) adjustInputHeight() {
 	m.input.SetWidth(m.width - 2)
 	m.viewport.Width = m.width - 2
 
-	m.input.SetHeight(1)
-	m.viewport.Height = max(0, m.height-m.input.Height()-1)
+	// Dynamically adjust input height based on content (including soft wrapping),
+	// clamped between 1 and 7.
+	wrappedLines := m.input.WrappedLineCount()
+	inputHeight := min(max(wrappedLines, 1), 7)
+	m.input.SetHeight(inputHeight)
+	m.viewport.Height = max(0, m.height-inputHeight-1)
 }
 
 func (m *model) updateViewport() {
