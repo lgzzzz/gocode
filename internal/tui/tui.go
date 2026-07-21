@@ -54,15 +54,13 @@ func NewModel(ag *agent.Agent) tea.Model {
 	}
 
 	ta := textarea.New()
-	ta.Placeholder = "Describe your coding task..."
 	ta.Focus()
 	ta.ShowLineNumbers = false
-	vp := viewport.New(0, 0) // account for input area and padding
 	ta.KeyMap.InsertNewline = key.NewBinding(key.WithKeys("shift+tab"), key.WithHelp("shift+tab", "insert new line"))
 
 	m := model{
 		input:    ta,
-		viewport: vp,
+		viewport: viewport.New(0, 0),
 		agent:    ag,
 		width:    width,
 		height:   height,
