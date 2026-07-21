@@ -2,12 +2,14 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
-	"io"
 	"os"
 	"strings"
 
-	openai "github.com/sashabaranov/go-openai"
+	openai "github.com/openai/openai-go"
+	"github.com/openai/openai-go/option"
+	"github.com/openai/openai-go/shared"
 
 	"github.com/lgzzzz/gocode/internal/tools"
 )
@@ -39,34 +41,37 @@ type CallbackMsg struct {
 
 // Agent implements a ReAct-style loop using OpenAI-compatible function calling.
 type Agent struct {
-	client   *openai.Client
+	client   openai.Client
 	model    string
-	tools    []openai.Tool
+	oaiTools []openai.ChatCompletionToolParam
 	toolDefs []tools.ToolDef // tool definitions for system prompt generation
 	toolMap  map[string]tools.ToolExecutor
 	cwd      string
-	history  []openai.ChatCompletionMessage // conversation history
-	msgCount int                            // counter for generating unique message IDs
+	history  []openai.ChatCompletionMessageParamUnion // conversation history
+	msgCount int                                      // counter for generating unique message IDs
 }
 
 func New(apiKey, model, baseURL string) *Agent {
 	if baseURL == "" {
 		baseURL = "https://api.deepseek.com"
 	}
-	cfg := openai.DefaultConfig(apiKey)
-	cfg.BaseURL = baseURL
-	client := openai.NewClientWithConfig(cfg)
+
+	opts := []option.RequestOption{
+		option.WithAPIKey(apiKey),
+		option.WithBaseURL(baseURL),
+	}
+	client := openai.NewClient(opts...)
 
 	tm, defs := tools.AllTools()
 
-	var oaiTools []openai.Tool
+	var oaiTools []openai.ChatCompletionToolParam
 	for _, d := range defs {
-		oaiTools = append(oaiTools, openai.Tool{
-			Type: openai.ToolTypeFunction,
-			Function: &openai.FunctionDefinition{
+		oaiTools = append(oaiTools, openai.ChatCompletionToolParam{
+			Type: "function",
+			Function: shared.FunctionDefinitionParam{
 				Name:        d.Name,
-				Description: d.Description,
-				Parameters:  d.Parameters,
+				Description: openai.String(d.Description),
+				Parameters:  shared.FunctionParameters(d.Parameters.(map[string]any)),
 			},
 		})
 	}
@@ -76,7 +81,7 @@ func New(apiKey, model, baseURL string) *Agent {
 	return &Agent{
 		client:   client,
 		model:    model,
-		tools:    oaiTools,
+		oaiTools: oaiTools,
 		toolDefs: defs,
 		toolMap:  tm,
 		cwd:      cwd,
@@ -97,19 +102,13 @@ func New(apiKey, model, baseURL string) *Agent {
 func (a *Agent) Run(ctx context.Context, userMessage string, cb func(CallbackMsg)) (string, error) {
 	// Initialize history with system prompt on first run
 	if len(a.history) == 0 {
-		a.history = []openai.ChatCompletionMessage{
-			{
-				Role:    openai.ChatMessageRoleSystem,
-				Content: a.systemPrompt(),
-			},
+		a.history = []openai.ChatCompletionMessageParamUnion{
+			openai.SystemMessage(a.systemPrompt()),
 		}
 	}
 
 	// Append the new user message to history
-	a.history = append(a.history, openai.ChatCompletionMessage{
-		Role:    openai.ChatMessageRoleUser,
-		Content: userMessage,
-	})
+	a.history = append(a.history, openai.UserMessage(userMessage))
 
 	messages := a.history
 
@@ -128,22 +127,20 @@ func (a *Agent) Run(ctx context.Context, userMessage string, cb func(CallbackMsg
 		// If the model wants to call tools
 		if len(toolCalls) > 0 {
 			// Build the assistant message that requested tool calls
-			var oaiToolCalls []openai.ToolCall
+			var oaiToolCalls []openai.ChatCompletionMessageToolCallParam
 			for _, tc := range toolCalls {
-				oaiToolCalls = append(oaiToolCalls, openai.ToolCall{
+				oaiToolCalls = append(oaiToolCalls, openai.ChatCompletionMessageToolCallParam{
 					ID:   tc.ID,
-					Type: openai.ToolTypeFunction,
-					Function: openai.FunctionCall{
+					Type: "function",
+					Function: openai.ChatCompletionMessageToolCallFunctionParam{
 						Name:      tc.Name,
 						Arguments: tc.Arguments,
 					},
 				})
 			}
-			assistantMsg := openai.ChatCompletionMessage{
-				Role:      openai.ChatMessageRoleAssistant,
-				Content:   fullContent,
-				ToolCalls: oaiToolCalls,
-			}
+			assistantMsg := openai.AssistantMessage(fullContent)
+			// Set tool calls on the assistant message
+			assistantMsg.OfAssistant.ToolCalls = oaiToolCalls
 			messages = append(messages, assistantMsg)
 
 			for _, tc := range toolCalls {
@@ -175,20 +172,13 @@ func (a *Agent) Run(ctx context.Context, userMessage string, cb func(CallbackMsg
 					ToolCallID: tc.ID,
 				})
 
-				messages = append(messages, openai.ChatCompletionMessage{
-					Role:       openai.ChatMessageRoleTool,
-					Content:    result,
-					ToolCallID: tc.ID,
-				})
+				messages = append(messages, openai.ToolMessage(result, tc.ID))
 			}
 			continue
 		}
 
 		// Final text response — append to history
-		messages = append(messages, openai.ChatCompletionMessage{
-			Role:    openai.ChatMessageRoleAssistant,
-			Content: fullContent,
-		})
+		messages = append(messages, openai.AssistantMessage(fullContent))
 		a.history = messages
 		return fullContent, nil
 	}
@@ -200,41 +190,36 @@ func (a *Agent) Run(ctx context.Context, userMessage string, cb func(CallbackMsg
 // streaming updates and allow the TUI to update components in-place.
 func (a *Agent) streamOne(
 	ctx context.Context,
-	messages []openai.ChatCompletionMessage,
+	messages []openai.ChatCompletionMessageParamUnion,
 	msgID string,
 	cb func(CallbackMsg),
 ) (content string, toolCalls []toolCallAccum, err error) {
-	stream, err := a.client.CreateChatCompletionStream(ctx, openai.ChatCompletionRequest{
-		Model:    a.model,
-		Messages: messages,
-		Tools:    a.tools,
+	stream := a.client.Chat.Completions.NewStreaming(ctx, openai.ChatCompletionNewParams{
+		Model:           a.model,
+		Messages:        messages,
+		Tools:           a.oaiTools,
+		ReasoningEffort: "max",
 	})
-	if err != nil {
-		return "", nil, fmt.Errorf("API error: %w", err)
+	if stream.Err() != nil {
+		return "", nil, fmt.Errorf("API error: %w", stream.Err())
 	}
 	defer stream.Close()
 
 	var (
 		fullContent   strings.Builder
 		fullReasoning strings.Builder
-		tcMap         = make(map[int]*toolCallAccum) // index -> accumulator
+		tcMap         = make(map[int64]*toolCallAccum) // index -> accumulator
 	)
 
-	for {
-		response, recvErr := stream.Recv()
-		if recvErr == io.EOF {
-			break
-		}
-		if recvErr != nil {
-			return "", nil, fmt.Errorf("stream error: %w", recvErr)
-		}
+	for stream.Next() {
+		chunk := stream.Current()
 
-		if len(response.Choices) == 0 {
+		if len(chunk.Choices) == 0 {
 			continue
 		}
-		delta := response.Choices[0].Delta
+		delta := chunk.Choices[0].Delta
 
-		// Handle reasoning_content (DeepSeek-style)
+		// Handle reasoning_content (DeepSeek-style) via raw JSON
 		if rc := reasoningContent(delta); rc != "" {
 			fullReasoning.WriteString(rc)
 			cb(CallbackMsg{Type: MsgThinkingStream, ID: msgID, Content: fullReasoning.String()})
@@ -248,10 +233,7 @@ func (a *Agent) streamOne(
 
 		// Handle tool calls (accumulate by index)
 		for _, tc := range delta.ToolCalls {
-			idx := 0
-			if tc.Index != nil {
-				idx = *tc.Index
-			}
+			idx := tc.Index
 			acc, ok := tcMap[idx]
 			if !ok {
 				acc = &toolCallAccum{}
@@ -270,8 +252,12 @@ func (a *Agent) streamOne(
 		}
 	}
 
+	if stream.Err() != nil {
+		return "", nil, fmt.Errorf("stream error: %w", stream.Err())
+	}
+
 	// Collect accumulated tool calls in index order
-	for i := 0; i < len(tcMap); i++ {
+	for i := int64(0); i < int64(len(tcMap)); i++ {
 		if acc, ok := tcMap[i]; ok {
 			toolCalls = append(toolCalls, *acc)
 		}
@@ -285,22 +271,31 @@ func (a *Agent) streamOne(
 	return fullContent.String(), toolCalls, nil
 }
 
-// reasoningContent extracts reasoning_content from the delta.
-// go-openai doesn't expose this field, so we use a type assertion
-// against the raw map if available, or check a known embedded field.
-func reasoningContent(delta openai.ChatCompletionStreamChoiceDelta) string {
-	// The go-openai library may have ReasoningContent field in newer versions.
-	// Try to access it via interface checks.
-	// For now, this is a placeholder — DeepSeek puts reasoning_content in the
-	// delta JSON alongside "content". Since go-openai v1.36.1 doesn't parse it,
-	// we return empty. Streaming of regular content still works.
+// reasoningContent extracts reasoning_content from the delta raw JSON.
+// DeepSeek puts reasoning_content in the delta JSON alongside "content".
+// The official OpenAI library doesn't parse it as a named field, so we
+// extract it from the raw JSON.
+func reasoningContent(delta openai.ChatCompletionChunkChoiceDelta) string {
+	raw := delta.RawJSON()
+	if raw == "" {
+		return ""
+	}
+	var m map[string]any
+	if err := json.Unmarshal([]byte(raw), &m); err != nil {
+		return ""
+	}
+	if rc, ok := m["reasoning_content"]; ok {
+		if s, ok := rc.(string); ok {
+			return s
+		}
+	}
 	return ""
 }
 
 // toolCallAccum accumulates a tool call from streaming deltas.
 type toolCallAccum struct {
 	ID        string
-	Type      openai.ToolType
+	Type      string
 	Name      string
 	Arguments string
 }
@@ -321,12 +316,9 @@ You help users by reading files, executing commands, editing code, and writing n
 
 	// Build the tool list from tool definitions using one-line snippets (matching pi's style)
 	sb.WriteString("Available tools:\n")
-	for _, t := range a.tools {
-		if t.Function == nil {
-			continue
-		}
+	for _, t := range a.oaiTools {
 		// Look up the ToolDef to get the PromptSnippet
-		snippet := t.Function.Description // fallback to full description
+		snippet := t.Function.Description.Value // fallback to full description
 		for _, d := range a.toolDefs {
 			if d.Name == t.Function.Name && d.PromptSnippet != "" {
 				snippet = d.PromptSnippet
@@ -338,10 +330,7 @@ You help users by reading files, executing commands, editing code, and writing n
 
 	sb.WriteString("\nGuidelines:\n")
 	seen := make(map[string]bool)
-	for _, t := range a.tools {
-		if t.Function == nil {
-			continue
-		}
+	for _, t := range a.oaiTools {
 		for _, d := range a.toolDefs {
 			if d.Name == t.Function.Name {
 				for _, g := range d.PromptGuidelines {
