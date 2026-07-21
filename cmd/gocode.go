@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 	"github.com/lgzzzz/gocode/internal/agent"
 	"github.com/lgzzzz/gocode/internal/tui"
 )
@@ -21,7 +21,7 @@ func main() {
 	baseURL := "https://api.deepseek.com"
 
 	ag := agent.New(apiKey, model, baseURL)
-	p := tea.NewProgram(tui.NewModel(ag), tea.WithAltScreen(), tea.WithMouseAllMotion())
+	p := tea.NewProgram(tui.NewModel(ag))
 	if _, err := p.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)

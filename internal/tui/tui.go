@@ -7,12 +7,12 @@ import (
 	"os"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/key"
-	"github.com/charmbracelet/bubbles/viewport"
-	tea "github.com/charmbracelet/bubbletea"
+	"charm.land/bubbles/v2/key"
+	"charm.land/bubbles/v2/textarea"
+	"charm.land/bubbles/v2/viewport"
+	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/term"
-	"github.com/lgzzzz/gocode/internal/textarea"
 
 	"github.com/lgzzzz/gocode/internal/agent"
 	"github.com/lgzzzz/gocode/internal/tui/compoent"
@@ -61,7 +61,7 @@ func NewModel(ag *agent.Agent) tea.Model {
 
 	m := model{
 		input:    ta,
-		viewport: viewport.New(0, 0),
+		viewport: viewport.New(),
 		agent:    ag,
 		width:    width,
 		height:   height,
@@ -78,10 +78,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 
 	switch msg := msg.(type) {
-	case tea.MouseMsg:
-		cmds = append(cmds, m.handleMouseMsg(msg)...)
-	case tea.KeyMsg:
-		cmds = append(cmds, m.handleKeyMsg(msg)...)
+	case tea.MouseWheelMsg:
+		cmds = append(cmds, m.updateViewportModel(msg)...)
+	case tea.MouseClickMsg, tea.MouseMotionMsg:
+		// ignored for now
+	case tea.KeyPressMsg:
+		cmds = append(cmds, m.handleKeyPress(msg)...)
+	case tea.KeyReleaseMsg:
+		// ignored for now
 	case tea.WindowSizeMsg:
 		cmds = append(cmds, m.handleWindowSizeMsg(msg)...)
 	case progressMsg:
@@ -96,39 +100,33 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // ---- message handlers ----
 
-// handleMouseMsg routes mouse events to the appropriate sub-components.
-// Wheel events go to viewport only (for scrolling); click/motion goes to both.
-func (m *model) handleMouseMsg(msg tea.MouseMsg) []tea.Cmd {
-	if isMouseWheel(msg) {
-		return m.updateViewportModel(msg)
-	}
-	return nil
-}
-
-// handleKeyMsg processes keyboard events: arrow keys go to input only,
-// other keys go to both input and viewport, plus special key bindings.
-func (m *model) handleKeyMsg(msg tea.KeyMsg) []tea.Cmd {
+// handleKeyPress processes keyboard events.
+func (m *model) handleKeyPress(msg tea.KeyPressMsg) []tea.Cmd {
 	var cmds []tea.Cmd
 
-	if msg.Type == tea.KeyUp || msg.Type == tea.KeyDown {
+	k := msg.Key()
+
+	// Always forward to input (except for special keys that we handle first).
+	switch {
+	case k.Code == tea.KeyUp || k.Code == tea.KeyDown:
 		cmds = append(cmds, m.updateInput(msg)...)
-	} else {
+	default:
 		cmds = append(cmds, m.updateInput(msg)...)
 	}
 
 	// Special key bindings (quit, submit, etc.)
-	switch msg.Type {
-	case tea.KeyCtrlC:
+	switch msg.String() {
+	case "ctrl+c":
 		cmds = append(cmds, tea.Quit)
 		return cmds
 
-	case tea.KeyEsc:
+	case "esc":
 		if m.running {
 			m.cancelAgent()
 		}
 		return cmds
 
-	case tea.KeyEnter:
+	case "enter":
 		if !m.running {
 			cmd := m.submitTask()
 			if cmd != nil {
@@ -314,21 +312,20 @@ func (m *model) applyToolResult(msg progressMsg) {
 
 func (m *model) adjustInputHeight() {
 	m.input.SetWidth(m.width - 2)
-	m.viewport.Width = m.width - 2
+	m.viewport.SetWidth(m.width - 2)
 
 	// Dynamically adjust input height based on content (including soft wrapping),
 	// clamped between 1 and 7.
-	wrappedLines := m.input.WrappedLineCount()
-	inputHeight := min(max(wrappedLines, 1), 7)
+	inputHeight := min(max(m.input.Height(), 1), 7)
 	m.input.SetHeight(inputHeight)
-	m.viewport.Height = max(0, m.height-inputHeight-1)
+	m.viewport.SetHeight(max(0, m.height-inputHeight-1))
 }
 
 func (m *model) updateViewport() {
 	atBottom := m.viewport.AtBottom()
 	var parts []string
 	for _, comp := range m.log {
-		rendered := comp.Render(m.viewport.Width)
+		rendered := comp.Render(m.viewport.Width())
 		if rendered != "" {
 			parts = append(parts, rendered)
 			parts = append(parts, "") // spacing between cards
@@ -345,9 +342,14 @@ func (m *model) updateViewport() {
 	}
 }
 
-func (m model) View() string {
+func (m model) View() tea.View {
+	v := tea.NewView("")
+	v.AltScreen = true
+	v.MouseMode = tea.MouseModeAllMotion
+
 	if m.width == 0 {
-		return "Initializing..."
+		v.SetContent("Initializing...")
+		return v
 	}
 
 	var inputArea string
@@ -359,11 +361,12 @@ func (m model) View() string {
 
 	// Put input area inside the viewport at the bottom
 	vpContent := m.viewport.View()
-	return lipgloss.JoinVertical(lipgloss.Left,
+	v.SetContent(lipgloss.JoinVertical(lipgloss.Left,
 		vpContent,
 		"",
 		inputArea,
-	)
+	))
+	return v
 }
 
 // componentTypeStr maps agent callback types to component type strings,
@@ -403,14 +406,6 @@ var (
 			Foreground(lipgloss.Color("8")).
 			Italic(true)
 )
-
-// isMouseWheel reports whether a mouse event is a wheel/scroll action.
-func isMouseWheel(m tea.MouseMsg) bool {
-	return m.Button == tea.MouseButtonWheelUp ||
-		m.Button == tea.MouseButtonWheelDown ||
-		m.Button == tea.MouseButtonWheelLeft ||
-		m.Button == tea.MouseButtonWheelRight
-}
 
 func waitCmd(ch chan progressMsg) tea.Cmd {
 	return func() tea.Msg {

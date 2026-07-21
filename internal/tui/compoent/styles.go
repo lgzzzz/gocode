@@ -3,7 +3,7 @@ package compoent
 import (
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 )
 
 // renderTrim renders content with the given style and trims trailing blank lines.
