@@ -6,12 +6,13 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/textarea"
 	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/term"
 
 	"github.com/lgzzzz/gocode/internal/agent"
@@ -45,6 +46,7 @@ type model struct {
 	ch       chan progressMsg
 
 	lastContent string // track content to detect when it changes (for auto-scroll)
+	dirty       bool   // true when log needs re-rendering
 }
 
 // NewModel creates a new TUI model.
@@ -55,9 +57,20 @@ func NewModel(ag *agent.Agent) tea.Model {
 	}
 
 	ta := textarea.New()
-	ta.Focus()
-	ta.ShowLineNumbers = false
 	ta.KeyMap.InsertNewline = key.NewBinding(key.WithKeys("shift+tab"), key.WithHelp("shift+tab", "insert new line"))
+	ta.ShowLineNumbers = false // 隐藏行号
+	ta.CharLimit = -1          // 无字符限制
+	ta.SetVirtualCursor(false) // 使用真实光标（支持闪烁）
+	ta.DynamicHeight = true    // 动态高度（自动根据内容调整）
+	ta.MinHeight = 1           // 最小 1 行
+	ta.MaxHeight = 7           // 最大 7 行
+
+	// 设置光标闪烁速度（默认 530ms，这里调快一些）
+	styles := ta.Styles()
+	styles.Cursor.BlinkSpeed = 500 * time.Millisecond
+	ta.SetStyles(styles)
+
+	ta.Focus() // 初始获得焦点
 
 	m := model{
 		input:    ta,
@@ -66,12 +79,12 @@ func NewModel(ag *agent.Agent) tea.Model {
 		width:    width,
 		height:   height,
 	}
-	m.adjustInputHeight()
+	m.adjustLayout()
 	return m
 }
 
 func (m model) Init() tea.Cmd {
-	return nil
+	return m.input.Focus()
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -80,8 +93,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.MouseWheelMsg:
 		cmds = append(cmds, m.updateViewportModel(msg)...)
-	case tea.MouseClickMsg, tea.MouseMotionMsg:
-		// ignored for now
 	case tea.KeyPressMsg:
 		cmds = append(cmds, m.handleKeyPress(msg)...)
 	case tea.KeyReleaseMsg:
@@ -92,7 +103,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, m.handleProgressMsg(msg)...)
 	}
 
-	m.adjustInputHeight()
+	m.adjustLayout()
 	m.updateViewport()
 
 	return m, tea.Batch(cmds...)
@@ -142,6 +153,7 @@ func (m *model) handleKeyPress(msg tea.KeyPressMsg) []tea.Cmd {
 func (m *model) handleWindowSizeMsg(msg tea.WindowSizeMsg) []tea.Cmd {
 	m.width = msg.Width
 	m.height = msg.Height
+	m.dirty = true // width changed, need re-render
 	// WindowSizeMsg still needs to reach input and viewport so they
 	// can adjust their own internal sizes.
 	return append(m.updateInput(msg), m.updateViewportModel(msg)...)
@@ -153,6 +165,7 @@ func (m *model) handleProgressMsg(msg progressMsg) []tea.Cmd {
 		m.log = append(m.log,
 			compoent.ErrorMessage{Content: msg.err.Error()},
 		)
+		m.dirty = true
 		return nil
 	}
 
@@ -169,12 +182,15 @@ func (m *model) handleProgressMsg(msg progressMsg) []tea.Cmd {
 
 	case agent.MsgToolCall:
 		m.log = append(m.log, compoent.NewToolMessage(msg.id, msg.toolName, msg.toolArgs))
+		m.dirty = true
 
 	case agent.MsgToolResult:
 		m.applyToolResult(msg)
+		m.dirty = true
 
 	default:
 		m.log = append(m.log, &compoent.AssistantMessage{ID: msg.id, Content: msg.content})
+		m.dirty = true
 	}
 
 	if m.ch != nil {
@@ -217,6 +233,7 @@ func (m *model) submitTask() tea.Cmd {
 	m.log = append(m.log,
 		compoent.UserMessage{Content: input},
 	)
+	m.dirty = true
 	m.running = true
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -275,6 +292,7 @@ func (m *model) applyStreamUpdate(msg progressMsg) {
 			case *compoent.ThinkingMessage:
 				c.Content = msg.content
 			}
+			m.dirty = true
 			return
 		}
 	}
@@ -285,6 +303,7 @@ func (m *model) applyStreamUpdate(msg progressMsg) {
 	case "thinking":
 		m.log = append(m.log, &compoent.ThinkingMessage{ID: msg.id, Content: msg.content})
 	}
+	m.dirty = true
 }
 
 // applyToolResult finds the matching tool-call component and sets its result,
@@ -298,6 +317,7 @@ func (m *model) applyToolResult(msg progressMsg) {
 					tm.SetError()
 				}
 			}
+			m.dirty = true
 			return
 		}
 	}
@@ -308,20 +328,22 @@ func (m *model) applyToolResult(msg progressMsg) {
 		tm.SetError()
 	}
 	m.log = append(m.log, tm)
+	m.dirty = true
 }
 
-func (m *model) adjustInputHeight() {
+func (m *model) adjustLayout() {
 	m.input.SetWidth(m.width - 2)
 	m.viewport.SetWidth(m.width - 2)
-
-	// Dynamically adjust input height based on content (including soft wrapping),
-	// clamped between 1 and 7.
-	inputHeight := min(max(m.input.Height(), 1), 7)
-	m.input.SetHeight(inputHeight)
-	m.viewport.SetHeight(max(0, m.height-inputHeight-1))
+	m.viewport.SetHeight(max(0, m.height-m.input.Height()-1))
 }
 
 func (m *model) updateViewport() {
+	// Skip expensive re-render if nothing changed (e.g. during rapid typing/deletion).
+	if !m.dirty {
+		return
+	}
+	m.dirty = false
+
 	atBottom := m.viewport.AtBottom()
 	var parts []string
 	for _, comp := range m.log {
@@ -366,6 +388,17 @@ func (m model) View() tea.View {
 		"",
 		inputArea,
 	))
+
+	// Set real cursor position for the textarea.
+	// The textarea cursor is relative to its own top-left; offset it by the
+	// viewport height + 1 blank line to match its position in the full view.
+	if !m.running {
+		if c := m.input.Cursor(); c != nil {
+			c.Position.Y += m.viewport.Height() + 1
+			v.Cursor = c
+		}
+	}
+
 	return v
 }
 
