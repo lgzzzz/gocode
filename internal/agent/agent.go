@@ -22,8 +22,6 @@ type MsgType string
 const (
 	MsgThinkingStream  MsgType = "thinking_stream"  // streaming thinking/reasoning content
 	MsgAssistantStream MsgType = "assistant_stream" // streaming assistant content
-	MsgAssistantDone   MsgType = "assistant_done"   // assistant streaming finished
-	MsgThinking        MsgType = "thinking"         // non-streaming thinking block
 	MsgToolCall        MsgType = "tool_call"        // tool call issued
 	MsgToolResult      MsgType = "tool_result"      // tool execution result
 )
@@ -121,9 +119,6 @@ func (a *Agent) Run(ctx context.Context, userMessage string, cb func(CallbackMsg
 		if err != nil {
 			return "", err
 		}
-
-		// Signal end of streaming for the assistant message
-		cb(CallbackMsg{Type: MsgAssistantDone, ID: msgID})
 
 		// If the model wants to call tools
 		if len(toolCalls) > 0 {
@@ -270,11 +265,6 @@ func (a *Agent) streamOne(
 		if acc, ok := tcMap[i]; ok {
 			toolCalls = append(toolCalls, *acc)
 		}
-	}
-
-	// If there was reasoning but no content, show reasoning as thinking
-	if fullContent.Len() == 0 && fullReasoning.Len() > 0 {
-		cb(CallbackMsg{Type: MsgThinking, ID: msgID, Content: fullReasoning.String()})
 	}
 
 	return fullContent.String(), toolCalls, nil

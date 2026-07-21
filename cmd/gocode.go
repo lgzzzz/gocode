@@ -21,7 +21,7 @@ func main() {
 	baseURL := "https://api.deepseek.com"
 
 	ag := agent.New(apiKey, model, baseURL)
-	p := tea.NewProgram(tui.NewModel(ag), tea.WithAltScreen())
+	p := tea.NewProgram(tui.NewModel(ag), tea.WithAltScreen(), tea.WithMouseAllMotion())
 	if _, err := p.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
