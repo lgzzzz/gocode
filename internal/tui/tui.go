@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -40,6 +41,7 @@ type model struct {
 	width    int
 	height   int
 	running  bool
+	cancel   context.CancelFunc // cancels the running agent context
 	ch       chan progressMsg
 
 	lastContent string // track content to detect when it changes (for auto-scroll)
@@ -116,8 +118,17 @@ func (m *model) handleKeyMsg(msg tea.KeyMsg) []tea.Cmd {
 
 	// Special key bindings (quit, submit, etc.)
 	switch msg.Type {
-	case tea.KeyCtrlC, tea.KeyEsc:
+	case tea.KeyCtrlC:
 		cmds = append(cmds, tea.Quit)
+		return cmds
+
+	case tea.KeyEsc:
+		if m.running {
+			// Stop the current ReAct loop without closing gocode
+			m.cancelAgent()
+		} else {
+			cmds = append(cmds, tea.Quit)
+		}
 		return cmds
 
 	case tea.KeyEnter:
@@ -152,6 +163,7 @@ func (m *model) handleProgressMsg(msg progressMsg) []tea.Cmd {
 
 	if msg.done {
 		m.running = false
+		m.cancel = nil
 		m.ch = nil
 		return nil
 	}
@@ -212,6 +224,9 @@ func (m *model) submitTask() tea.Cmd {
 	)
 	m.running = true
 
+	ctx, cancel := context.WithCancel(context.Background())
+	m.cancel = cancel
+
 	ch := make(chan progressMsg, 64)
 	m.ch = ch
 
@@ -223,7 +238,7 @@ func (m *model) submitTask() tea.Cmd {
 				close(ch)
 			}
 		}()
-		_, err := ag.Run(context.Background(), input, func(msg agent.CallbackMsg) {
+		_, err := ag.Run(ctx, input, func(msg agent.CallbackMsg) {
 			ch <- progressMsg{
 				typ:      msg.Type,
 				id:       msg.ID,
@@ -233,7 +248,7 @@ func (m *model) submitTask() tea.Cmd {
 				toolErr:  msg.Err,
 			}
 		})
-		if err != nil {
+		if err != nil && !errors.Is(err, context.Canceled) {
 			ch <- progressMsg{err: err}
 		}
 		ch <- progressMsg{done: true}
@@ -241,6 +256,16 @@ func (m *model) submitTask() tea.Cmd {
 	}(m.agent, input)
 
 	return waitCmd(ch)
+}
+
+// cancelAgent cancels the running agent context, stopping the ReAct loop.
+func (m *model) cancelAgent() {
+	if m.cancel != nil {
+		m.cancel()
+		m.cancel = nil
+	}
+	// The goroutine will receive context.Canceled, send the error + done
+	// messages, and handleProgressMsg will transition out of running state.
 }
 
 // applyStreamUpdate finds or creates a streaming component (assistant / thinking)
@@ -327,7 +352,7 @@ func (m model) View() string {
 
 	var inputArea string
 	if m.running {
-		inputArea = inputBarDimStyle.Render("⏳ Processing... (please wait)")
+		inputArea = inputBarDimStyle.Render("⏳ Processing... (Esc to stop)")
 	} else {
 		inputArea = m.input.View()
 	}
