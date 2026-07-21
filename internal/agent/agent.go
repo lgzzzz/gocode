@@ -310,7 +310,7 @@ func (a *Agent) systemPrompt() string {
 	var sb strings.Builder
 
 	// Opening line — matches pi's tone
-	sb.WriteString(`You are an expert coding assistant operating inside gocode, a coding agent harness.
+	sb.WriteString(`You are an expert coding assistant called GoCode.
 You help users by reading files, executing commands, editing code, and writing new files.`)
 
 	// Build the tool list from tool definitions using one-line snippets (matching pi's style)
