@@ -95,8 +95,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, m.updateViewportModel(msg)...)
 	case tea.KeyPressMsg:
 		cmds = append(cmds, m.handleKeyPress(msg)...)
-	case tea.KeyReleaseMsg:
-		// ignored for now
 	case tea.WindowSizeMsg:
 		cmds = append(cmds, m.handleWindowSizeMsg(msg)...)
 	case progressMsg:
@@ -203,6 +201,9 @@ func (m *model) handleProgressMsg(msg progressMsg) []tea.Cmd {
 
 // updateInput forwards a message to the input textarea and returns any command.
 func (m *model) updateInput(msg tea.Msg) []tea.Cmd {
+	if m.running {
+		return nil
+	}
 	newInput, cmd := m.input.Update(msg)
 	m.input = newInput
 	if cmd != nil {
