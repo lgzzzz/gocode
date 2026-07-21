@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
@@ -41,9 +42,8 @@ type model struct {
 	running  bool
 	ch       chan progressMsg
 
-	moreLines     int    // number of lines hidden above the input area viewport
-	lastLineCount int    // track line count to detect when new lines are added
-	lastContent   string // track content to detect when it changes (for auto-scroll)
+	moreLines   int    // number of lines hidden above the input area viewport
+	lastContent string // track content to detect when it changes (for auto-scroll)
 }
 
 // NewModel creates a new TUI model.
@@ -58,6 +58,7 @@ func NewModel(ag *agent.Agent) tea.Model {
 	ta.Focus()
 	ta.ShowLineNumbers = false
 	vp := viewport.New(0, 0) // account for input area and padding
+	ta.KeyMap.InsertNewline = key.NewBinding(key.WithKeys("shift+tab"), key.WithHelp("shift+tab", "insert new line"))
 
 	m := model{
 		input:    ta,
@@ -86,9 +87,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, m.handleWindowSizeMsg(msg)...)
 	case progressMsg:
 		cmds = append(cmds, m.handleProgressMsg(msg)...)
-	default:
-		cmds = append(cmds, m.updateInput(msg)...)
-		cmds = append(cmds, m.updateViewportModel(msg)...)
 	}
 
 	m.adjustInputHeight()
@@ -124,11 +122,6 @@ func (m *model) handleKeyMsg(msg tea.KeyMsg) []tea.Cmd {
 	case tea.KeyCtrlC, tea.KeyEsc:
 		cmds = append(cmds, tea.Quit)
 		return cmds
-
-	case tea.KeyShiftTab:
-		if !m.running {
-			m.input.InsertString("\n")
-		}
 
 	case tea.KeyEnter:
 		if !m.running {
@@ -301,19 +294,20 @@ func (m *model) applyToolResult(msg progressMsg) {
 }
 
 func (m *model) adjustInputHeight() {
-	totalLines := m.input.LineCount()
+	totalLines := len(strings.Split(m.input.View(), "\n"))
 	maxVisible := 7
-	if totalLines != m.lastLineCount {
-		m.input.SetHeight(totalLines)
-	}
+
+	// Always clamp input height to actual content lines, capped at maxVisible.
+	// This ensures the input area shrinks when content is deleted.
+	m.input.SetHeight(min(totalLines, maxVisible))
 	if totalLines > maxVisible {
-		m.input.SetHeight(maxVisible)
 		m.moreLines = totalLines - maxVisible
 	} else {
 		m.moreLines = 0
 	}
-	m.lastLineCount = totalLines
+
 	m.input.SetWidth(m.width - 2)
+
 	// Dynamically adjust viewport height when input height changes.
 	if m.height > 0 {
 		// Reserve space for: input area (visible lines) + 1 gap/more-indicator line.
