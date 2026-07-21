@@ -79,7 +79,7 @@ func (m *ToolMessage) Render(width int) string {
 	if m.State == ToolStateError {
 		style = toolErrorStyle
 	}
-	return style.Width(width - 1).Render(content)
+	return strings.TrimRight(style.Width(width-1).Render(content), "\n")
 }
 
 func truncateStr(s string, max int) string {

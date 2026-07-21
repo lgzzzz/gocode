@@ -124,10 +124,7 @@ func (m *model) handleKeyMsg(msg tea.KeyMsg) []tea.Cmd {
 
 	case tea.KeyEsc:
 		if m.running {
-			// Stop the current ReAct loop without closing gocode
 			m.cancelAgent()
-		} else {
-			cmds = append(cmds, tea.Quit)
 		}
 		return cmds
 

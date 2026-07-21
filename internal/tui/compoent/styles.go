@@ -1,6 +1,18 @@
 package compoent
 
-import "github.com/charmbracelet/lipgloss"
+import (
+	"strings"
+
+	"github.com/charmbracelet/lipgloss"
+)
+
+// renderTrim renders content with the given style and trims trailing blank lines.
+func renderTrim(style lipgloss.Style, width int, content string) string {
+	if strings.TrimSpace(content) == "" {
+		return ""
+	}
+	return strings.TrimRight(style.Width(width).Render(content), "\n")
+}
 
 // ---- Modern Left Accent Bar Styles ----
 //
