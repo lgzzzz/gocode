@@ -24,8 +24,9 @@ type progressMsg struct {
 	content  string
 	toolName string // tool name (set for tool_call)
 	toolArgs string // tool arguments JSON (set for tool_call)
+	toolErr  error  // tool execution error (set for tool_result)
 	done     bool
-	err      error
+	err      error  // fatal / panic error
 }
 
 // ---- model ----
@@ -137,6 +138,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 							content:  msg.Content,
 							toolName: msg.ToolName,
 							toolArgs: msg.ToolArgs,
+							toolErr:  msg.Err,
 						}
 					})
 					if err != nil {
@@ -198,6 +200,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					if m.log[i].MsgID() == msg.id && m.log[i].Type() == "tool" {
 						if tm, ok := m.log[i].(*compoent.ToolMessage); ok {
 							tm.SetResult(msg.content)
+							if msg.toolErr != nil {
+								tm.SetError()
+							}
 						}
 						found = true
 						break
@@ -207,6 +212,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					// Orphan result — create a tool message with the result already set.
 					tm := compoent.NewToolMessage(msg.id, msg.toolName, msg.toolArgs)
 					tm.SetResult(msg.content)
+					if msg.toolErr != nil {
+						tm.SetError()
+					}
 					m.log = append(m.log, tm)
 				}
 

@@ -36,8 +36,8 @@ func NewToolMessage(id, name, args string) *ToolMessage {
 }
 
 // SetResult updates the tool message with the execution result.
-// If the result indicates an error (e.g. starts with "Error:", "exit ",
-// or "(timed out"), state transitions to ToolStateError.
+// It falls back to pattern-matching on the result string to detect errors,
+// but callers should prefer using SetError() via CallbackMsg.Err for accuracy.
 func (m *ToolMessage) SetResult(result string) {
 	m.Result = result
 	if strings.HasPrefix(result, "Error:") ||
@@ -47,6 +47,12 @@ func (m *ToolMessage) SetResult(result string) {
 	} else {
 		m.State = ToolStateSuccess
 	}
+}
+
+// SetError explicitly marks the tool as having errored.
+// Call this after SetResult when CallbackMsg.Err is non-nil.
+func (m *ToolMessage) SetError() {
+	m.State = ToolStateError
 }
 
 func (m *ToolMessage) Type() string  { return "tool" }

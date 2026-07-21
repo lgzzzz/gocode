@@ -37,6 +37,7 @@ type CallbackMsg struct {
 	ToolCallID string  // tool call ID (set for tool_call and tool_result)
 	ToolName   string  // tool name (set for tool_call)
 	ToolArgs   string  // tool arguments JSON (set for tool_call)
+	Err        error   // tool execution error (set for tool_result)
 }
 
 // Agent implements a ReAct-style loop using OpenAI-compatible function calling.
@@ -154,14 +155,21 @@ func (a *Agent) Run(ctx context.Context, userMessage string, cb func(CallbackMsg
 
 				tool, ok := a.toolMap[tc.Name]
 				var result string
+				var toolErr error
 				if !ok {
 					result = fmt.Sprintf("Error: unknown tool '%s'", tc.Name)
+					toolErr = fmt.Errorf("unknown tool: %s", tc.Name)
 				} else {
 					res, err := tool.Execute(tc.Arguments)
 					if err != nil {
 						result = fmt.Sprintf("Error: %v", err)
+						toolErr = err
 					} else {
 						result = res
+						// Bash returns nil error even on non-zero exit; detect via result prefix.
+						if tc.Name == "bash" && (strings.HasPrefix(result, "exit ") || strings.HasPrefix(result, "(timed out")) {
+							toolErr = fmt.Errorf("%s", strings.SplitN(result, "\n", 2)[0])
+						}
 					}
 				}
 
@@ -170,6 +178,7 @@ func (a *Agent) Run(ctx context.Context, userMessage string, cb func(CallbackMsg
 					ID:         tc.ID,
 					Content:    result,
 					ToolCallID: tc.ID,
+					Err:        toolErr,
 				})
 
 				messages = append(messages, openai.ToolMessage(result, tc.ID))
