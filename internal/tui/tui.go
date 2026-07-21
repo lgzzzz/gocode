@@ -42,7 +42,6 @@ type model struct {
 	running  bool
 	ch       chan progressMsg
 
-	moreLines   int    // number of lines hidden above the input area viewport
 	lastContent string // track content to detect when it changes (for auto-scroll)
 }
 
@@ -292,27 +291,11 @@ func (m *model) applyToolResult(msg progressMsg) {
 }
 
 func (m *model) adjustInputHeight() {
-	totalLines := len(strings.Split(m.input.View(), "\n"))
-	maxVisible := 7
-
-	// Always clamp input height to actual content lines, capped at maxVisible.
-	// This ensures the input area shrinks when content is deleted.
-	m.input.SetHeight(min(totalLines, maxVisible))
-	if totalLines > maxVisible {
-		m.moreLines = totalLines - maxVisible
-	} else {
-		m.moreLines = 0
-	}
-
 	m.input.SetWidth(m.width - 2)
+	m.viewport.Width = m.width - 2
 
-	// Dynamically adjust viewport height when input height changes.
-	if m.height > 0 {
-		// Reserve space for: input area (visible lines) + 1 gap/more-indicator line.
-		inputReserved := m.input.Height() + 1
-		m.viewport.Height = max(0, m.height-inputReserved)
-		m.viewport.Width = m.width - 2
-	}
+	m.input.SetHeight(1)
+	m.viewport.Height = max(0, m.height-m.input.Height()-1)
 }
 
 func (m *model) updateViewport() {
@@ -345,21 +328,11 @@ func (m model) View() string {
 		inputArea = m.input.View()
 	}
 
-	// Show "X more lines/line" indicator when input exceeds visible area.
-	var moreIndicator string
-	if m.moreLines > 0 {
-		if m.moreLines == 1 {
-			moreIndicator = moreLinesStyle.Render("1 more line")
-		} else {
-			moreIndicator = moreLinesStyle.Render(fmt.Sprintf("%d more lines", m.moreLines))
-		}
-	}
-
 	// Put input area inside the viewport at the bottom
 	vpContent := m.viewport.View()
 	return lipgloss.JoinVertical(lipgloss.Left,
 		vpContent,
-		moreIndicator,
+		"",
 		inputArea,
 	)
 }
