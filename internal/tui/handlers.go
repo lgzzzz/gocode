@@ -75,11 +75,15 @@ func (m *model) handleProgressMsg(msg progressMsg) []tea.Cmd {
 	case agent.MsgAssistantStream, agent.MsgThinkingStream:
 		m.applyStreamUpdate(msg)
 
+	case agent.MsgToolResult:
+		m.applyToolResult(msg)
+
 	case agent.MsgToolCall:
 		m.history.Append(compoent.NewToolMessage(msg.id, msg.toolName, msg.toolArgs))
 
-	case agent.MsgToolResult:
-		m.applyToolResult(msg)
+	case agent.MsgError, agent.MsgRetryWait:
+		// Show error and retry messages in the history
+		m.history.Append(compoent.NewErrorMessage(msg.content))
 
 	default:
 		m.history.Append(compoent.NewAssistantMessage(msg.id, msg.content))

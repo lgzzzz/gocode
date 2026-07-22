@@ -2,7 +2,6 @@ package tui
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 
@@ -38,7 +37,7 @@ func (m *model) submitTask() tea.Cmd {
 				close(ch)
 			}
 		}()
-		_, err := ag.Run(ctx, input, func(msg agent.CallbackMsg) {
+		ag.Run(ctx, input, func(msg agent.CallbackMsg) {
 			ch <- progressMsg{
 				typ:      msg.Type,
 				id:       msg.ID,
@@ -48,9 +47,6 @@ func (m *model) submitTask() tea.Cmd {
 				toolErr:  msg.Err,
 			}
 		})
-		if err != nil && !errors.Is(err, context.Canceled) {
-			ch <- progressMsg{err: err}
-		}
 		ch <- progressMsg{done: true}
 		close(ch)
 	}(m.agent, input)

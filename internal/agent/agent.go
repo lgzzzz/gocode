@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	openai "github.com/openai/openai-go"
 	"github.com/openai/openai-go/option"
@@ -24,6 +25,8 @@ const (
 	MsgAssistantStream MsgType = "assistant_stream" // streaming assistant content
 	MsgToolCall        MsgType = "tool_call"        // tool call issued
 	MsgToolResult      MsgType = "tool_result"      // tool execution result
+	MsgError           MsgType = "error"            // API call error (may be followed by retry)
+	MsgRetryWait       MsgType = "retry_wait"       // waiting before retrying after an error
 )
 
 // CallbackMsg is passed to the progress callback during agent execution.
@@ -98,7 +101,7 @@ func New(apiKey, model, baseURL string) *Agent {
 //   - MsgThinking:        non-streaming thinking block
 //
 // It maintains conversation history across calls so the LLM can refer to previous messages.
-func (a *Agent) Run(ctx context.Context, userMessage string, cb func(CallbackMsg)) (string, error) {
+func (a *Agent) Run(ctx context.Context, userMessage string, cb func(CallbackMsg)) {
 	// Initialize history with system prompt on first run
 	if len(a.history) == 0 {
 		a.history = []openai.ChatCompletionMessageParamUnion{
@@ -117,7 +120,7 @@ func (a *Agent) Run(ctx context.Context, userMessage string, cb func(CallbackMsg
 
 		fullContent, toolCalls, err := a.streamOne(ctx, messages, msgID, cb)
 		if err != nil {
-			return "", err
+			return
 		}
 
 		// If the model wants to call tools
@@ -184,7 +187,7 @@ func (a *Agent) Run(ctx context.Context, userMessage string, cb func(CallbackMsg
 		// Final text response — append to history
 		messages = append(messages, openai.AssistantMessage(fullContent))
 		a.history = messages
-		return fullContent, nil
+		return
 	}
 }
 
@@ -192,7 +195,53 @@ func (a *Agent) Run(ctx context.Context, userMessage string, cb func(CallbackMsg
 // content and any tool calls. It calls cb with streaming deltas as they arrive.
 // msgID is a unique identifier for this assistant turn, used to correlate
 // streaming updates and allow the TUI to update components in-place.
+//
+// It retries up to maxRetries times on transient errors (e.g. network issues,
+// rate limiting, server errors), with exponential backoff between attempts.
 func (a *Agent) streamOne(
+	ctx context.Context,
+	messages []openai.ChatCompletionMessageParamUnion,
+	msgID string,
+	cb func(CallbackMsg),
+) (content string, toolCalls []toolCallAccum, err error) {
+	const maxRetries = 3
+	baseDelay := 2 * time.Second
+
+	for attempt := 0; attempt <= maxRetries; attempt++ {
+		content, toolCalls, err = a.streamOneAttempt(ctx, messages, msgID, cb)
+		if err == nil {
+			return content, toolCalls, nil
+		}
+
+		// Don't retry if context is cancelled
+		if ctx.Err() != nil {
+			cb(CallbackMsg{Type: MsgError, Content: fmt.Sprintf("请求已取消: %v", ctx.Err())})
+			return "", nil, fmt.Errorf("context cancelled: %w", ctx.Err())
+		}
+
+		// Last attempt failed — return the error
+		if attempt == maxRetries {
+			cb(CallbackMsg{Type: MsgError, Content: fmt.Sprintf("API 调用失败（已重试 %d 次）: %v", maxRetries, err)})
+			return "", nil, fmt.Errorf("API call failed after %d retries: %w", maxRetries, err)
+		}
+
+		// Report the error and notify that we'll retry
+		cb(CallbackMsg{Type: MsgError, Content: fmt.Sprintf("API 调用出错: %v", err)})
+
+		cb(CallbackMsg{Type: MsgRetryWait, Content: fmt.Sprintf("将在 %.0f 秒后重试（第 %d/%d 次）...", baseDelay.Seconds(), attempt+1, maxRetries)})
+
+		select {
+		case <-ctx.Done():
+			return "", nil, fmt.Errorf("context cancelled during retry wait: %w", ctx.Err())
+		case <-time.After(baseDelay):
+		}
+	}
+
+	return "", nil, fmt.Errorf("unreachable")
+}
+
+// streamOneAttempt performs a single streaming chat completion attempt.
+func (a *Agent) streamOneAttempt(
 	ctx context.Context,
 	messages []openai.ChatCompletionMessageParamUnion,
 	msgID string,
