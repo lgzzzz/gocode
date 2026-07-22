@@ -17,6 +17,7 @@ import (
 	"github.com/lgzzzz/gocode/internal/store"
 	"github.com/lgzzzz/gocode/internal/tui/history"
 	"github.com/lgzzzz/gocode/internal/tui/palette"
+	"github.com/lgzzzz/gocode/internal/tui/sessionbrowser"
 )
 
 // ---- model ----
@@ -35,10 +36,10 @@ type model struct {
 	cancel  context.CancelFunc // cancels the running agent context
 	ch      chan progressMsg
 
-	store          *store.Store     // session persistence (nil if unavailable)
-	sessionID      string           // current session UUID
-	cwd            string           // current working directory when session was created
-	sessionBrowser *SessionBrowser  // session list browser (nil when inactive)
+	store          *store.Store            // session persistence (nil if unavailable)
+	sessionID      string                  // current session UUID
+	cwd            string                  // current working directory when session was created
+	sessionBrowser *sessionbrowser.Browser // session list browser (use Active() to check)
 }
 
 // NewModel creates a new TUI model.
@@ -138,7 +139,7 @@ func (m model) View() tea.View {
 
 	// Place the editor below the output area.
 	var middleArea string
-	if m.sessionBrowser != nil {
+	if m.sessionBrowser.Active() {
 		middleArea = m.sessionBrowser.View()
 	} else {
 		middleArea = m.output.View()
@@ -149,7 +150,7 @@ func (m model) View() tea.View {
 		editorArea,
 	))
 
-	if !m.running && m.sessionBrowser == nil {
+	if !m.running {
 		if c := m.editor.Cursor(); c != nil {
 			c.Position.Y += m.output.Height() + 1
 			if m.palette.Active() {

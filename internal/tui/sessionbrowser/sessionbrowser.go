@@ -1,4 +1,6 @@
-package tui
+// Package sessionbrowser provides an interactive session list browser
+// built on the bubbles list component, used to select and load past sessions.
+package sessionbrowser
 
 import (
 	"fmt"
@@ -13,16 +15,15 @@ import (
 	"github.com/lgzzzz/gocode/internal/store"
 )
 
-// ---- SessionItem ----
+// ---- sessionItem ----
 
-// SessionItem adapts store.SessionInfo to the list.Item interface.
-type SessionItem struct {
-	Session          store.SessionInfo
-	currentSessionID string
+// sessionItem adapts store.SessionInfo to the list.Item interface.
+type sessionItem struct {
+	Session store.SessionInfo
 }
 
 // FilterValue returns the first user message for filtering (unused: filtering is disabled).
-func (si SessionItem) FilterValue() string {
+func (si sessionItem) FilterValue() string {
 	return si.Session.FirstMsg
 }
 
@@ -40,14 +41,9 @@ var (
 				Background(lipgloss.Color("0"))
 
 	sessionDimStyle = sessionItemStyle.
-				BorderLeft(true).
-				BorderStyle(lipgloss.ThickBorder()).
-				BorderForeground(lipgloss.Color("8"))
-
-	sessionCurrentStyle = sessionItemStyle.
-				BorderLeft(true).
-				BorderStyle(lipgloss.ThickBorder()).
-				BorderForeground(lipgloss.Color("11")) // yellow
+			BorderLeft(true).
+			BorderStyle(lipgloss.ThickBorder()).
+			BorderForeground(lipgloss.Color("8"))
 
 	sessionFirstMsgStyle = lipgloss.NewStyle().
 				Foreground(lipgloss.Color("15")).
@@ -58,16 +54,16 @@ var (
 				MaxWidth(80)
 )
 
-// ---- SessionDelegate ----
+// ---- sessionDelegate ----
 
-// SessionDelegate implements list.ItemDelegate for session items.
-type SessionDelegate struct{}
+// sessionDelegate implements list.ItemDelegate for session items.
+type sessionDelegate struct{}
 
-func (d SessionDelegate) Height() int   { return 2 }
-func (d SessionDelegate) Spacing() int  { return 0 }
+func (d sessionDelegate) Height() int  { return 2 }
+func (d sessionDelegate) Spacing() int { return 0 }
 
-func (d SessionDelegate) Render(w io.Writer, m list.Model, index int, item list.Item) {
-	si, ok := item.(SessionItem)
+func (d sessionDelegate) Render(w io.Writer, m list.Model, index int, item list.Item) {
+	si, ok := item.(sessionItem)
 	if !ok {
 		return
 	}
@@ -85,25 +81,13 @@ func (d SessionDelegate) Render(w io.Writer, m list.Model, index int, item list.
 	// Second line: metadata
 	t, _ := time.Parse(time.RFC3339, si.Session.CreatedAt)
 	timeStr := t.Local().Format("2006-01-02 15:04")
-	marker := ""
-	if si.Session.ID == si.currentSessionID {
-		marker = " ◀ current"
-	}
-	meta := fmt.Sprintf("%s  %s  %d msgs  %s%s",
+	meta := fmt.Sprintf("%s  %s  %d msgs  %s",
 		timeStr, si.Session.Model, si.Session.MessageCount,
-		si.Session.CWD, marker)
+		si.Session.CWD)
 
-	// Determine style based on selection and current status
+	// Selected vs dimmed style
 	style := sessionDimStyle
-	isCurrent := si.Session.ID == si.currentSessionID
-	isSelected := index == m.Index()
-
-	switch {
-	case isCurrent && isSelected:
-		style = sessionCurrentStyle.Background(lipgloss.Color("0"))
-	case isCurrent:
-		style = sessionCurrentStyle
-	case isSelected:
+	if index == m.Index() {
 		style = sessionSelectedStyle
 	}
 
@@ -115,22 +99,21 @@ func (d SessionDelegate) Render(w io.Writer, m list.Model, index int, item list.
 	fmt.Fprint(w, rendered)
 }
 
-func (d SessionDelegate) Update(msg tea.Msg, m *list.Model) tea.Cmd {
+func (d sessionDelegate) Update(msg tea.Msg, m *list.Model) tea.Cmd {
 	return nil
 }
 
-// ---- SessionBrowser ----
+// ---- Browser ----
 
-// SessionBrowser wraps a list.Model to provide interactive session selection.
-type SessionBrowser struct {
-	list  list.Model
-	items []SessionItem
+// Browser wraps a list.Model to provide interactive session selection.
+type Browser struct {
+	list   list.Model
+	active bool
 }
 
-// NewSessionBrowser creates a new session browser component.
-// currentSessionID is used to highlight the currently active session.
-func NewSessionBrowser(width, height int, currentSessionID string) *SessionBrowser {
-	delegate := SessionDelegate{}
+// New creates a new session browser component.
+func New(width, height int) *Browser {
+	delegate := sessionDelegate{}
 
 	// Pre-create an empty list; items are set later via SetSessions.
 	l := list.New(nil, delegate, width, height)
@@ -156,29 +139,35 @@ func NewSessionBrowser(width, height int, currentSessionID string) *SessionBrows
 	}
 	l.Paginator.PerPage = perPage
 
-	return &SessionBrowser{list: l}
+	return &Browser{list: l, active: true}
+}
+
+// SetActive sets the active state of the browser.
+func (b *Browser) SetActive(active bool) {
+	b.active = active
+}
+
+// Active returns whether the browser is currently active.
+func (b *Browser) Active() bool {
+	return b.active
 }
 
 // SetSessions populates the browser with the given sessions.
-func (sb *SessionBrowser) SetSessions(sessions []store.SessionInfo, currentSessionID string) {
+func (b *Browser) SetSessions(sessions []store.SessionInfo) {
 	items := make([]list.Item, len(sessions))
 	for i, s := range sessions {
-		items[i] = SessionItem{Session: s, currentSessionID: currentSessionID}
+		items[i] = sessionItem{Session: s}
 	}
-	sb.items = make([]SessionItem, len(items))
-	for i, item := range items {
-		sb.items[i] = item.(SessionItem)
-	}
-	sb.list.SetItems(items)
+	b.list.SetItems(items)
 }
 
 // Selected returns the currently selected session, or nil if none.
-func (sb *SessionBrowser) Selected() *store.SessionInfo {
-	item := sb.list.SelectedItem()
+func (b *Browser) Selected() *store.SessionInfo {
+	item := b.list.SelectedItem()
 	if item == nil {
 		return nil
 	}
-	si, ok := item.(SessionItem)
+	si, ok := item.(sessionItem)
 	if !ok {
 		return nil
 	}
@@ -187,23 +176,18 @@ func (sb *SessionBrowser) Selected() *store.SessionInfo {
 }
 
 // Update delegates to the underlying list model.
-func (sb *SessionBrowser) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	newList, cmd := sb.list.Update(msg)
-	sb.list = newList
+func (b *Browser) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	newList, cmd := b.list.Update(msg)
+	b.list = newList
 	return nil, cmd
 }
 
 // View returns the rendered list.
-func (sb *SessionBrowser) View() string {
-	return sb.list.View()
+func (b *Browser) View() string {
+	return b.list.View()
 }
 
 // SetSize updates the browser dimensions and recalculates pagination.
-func (sb *SessionBrowser) SetSize(width, height int) {
-	sb.list.SetSize(width, height)
-	perPage := height / 2
-	if perPage < 1 {
-		perPage = 1
-	}
-	sb.list.Paginator.PerPage = perPage
+func (b *Browser) SetSize(width, height int) {
+	b.list.SetSize(width, height)
 }

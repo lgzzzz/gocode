@@ -19,7 +19,7 @@ func (m *model) adjustLayout() {
 	outputHeight := max(0, m.height-totalBottom)
 	m.output.SetHeight(outputHeight)
 
-	if m.sessionBrowser != nil {
+	if m.sessionBrowser.Active() {
 		m.sessionBrowser.SetSize(m.width-2, outputHeight)
 	}
 }

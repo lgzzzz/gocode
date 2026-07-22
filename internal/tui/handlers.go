@@ -17,7 +17,7 @@ func (m *model) handleKeyPress(msg tea.KeyPressMsg) []tea.Cmd {
 	var cmds []tea.Cmd
 
 	// ---- session browser mode ----
-	if m.sessionBrowser != nil {
+	if m.sessionBrowser.Active() {
 		switch msg.String() {
 		case "esc", "ctrl+c":
 			m.ExitSessionBrowser()

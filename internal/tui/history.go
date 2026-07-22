@@ -9,6 +9,7 @@ import (
 	"github.com/lgzzzz/gocode/internal/agent"
 	"github.com/lgzzzz/gocode/internal/store"
 	"github.com/lgzzzz/gocode/internal/tui/compoent"
+	"github.com/lgzzzz/gocode/internal/tui/sessionbrowser"
 )
 
 // ---- ModelAccess interface implementation ----
@@ -73,14 +74,14 @@ func (m *model) EnterSessionBrowser() {
 		m.history.Append(compoent.NewSystemMessage("📭 暂无历史会话"))
 		return
 	}
-	m.sessionBrowser = NewSessionBrowser(m.width, m.output.Height(), m.sessionID)
-	m.sessionBrowser.SetSessions(sessions, m.sessionID)
+	m.sessionBrowser = sessionbrowser.New(m.width, m.output.Height())
+	m.sessionBrowser.SetSessions(sessions)
 }
 
 // ExitSessionBrowser deactivates the session browser and restores
 // the normal output viewport.
 func (m *model) ExitSessionBrowser() {
-	m.sessionBrowser = nil
+	m.sessionBrowser.SetActive(false)
 }
 
 // LoadSession loads all messages from the given session and rebuilds
@@ -134,6 +135,6 @@ func (m *model) LoadSession(sessionID string) {
 
 	// 3. Switch to the loaded session.
 	m.sessionID = sessionID
-	m.sessionBrowser = nil
+	m.sessionBrowser.SetActive(false)
 	m.output.GotoBottom()
 }
