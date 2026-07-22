@@ -77,6 +77,7 @@ func (m *model) handleKeyPress(msg tea.KeyPressMsg) []tea.Cmd {
 			if cmd != nil {
 				cmds = append(cmds, cmd)
 			}
+			m.output.GotoBottom()
 		}
 	}
 

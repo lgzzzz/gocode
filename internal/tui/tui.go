@@ -113,7 +113,7 @@ func (m model) View() tea.View {
 	} else {
 		if m.palette.Active() {
 			editorArea = lipgloss.JoinVertical(lipgloss.Left,
-				m.palette.Render(m.width),
+				m.palette.Render(),
 				m.editor.View(),
 			)
 		} else {

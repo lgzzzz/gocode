@@ -11,19 +11,20 @@ import (
 
 // ---- styles ----
 var (
-	// popupStyle — border + padding for the palette container.
-	popupStyle = lipgloss.NewStyle().BorderLeft(true).
+	// lineBase — shared left border + padding for every palette row.
+	lineBase = lipgloss.NewStyle().
+			BorderLeft(true).
 			BorderStyle(lipgloss.ThickBorder()).
 			BorderForeground(lipgloss.Color("7")).
 			Padding(0, 1)
 
-	// highlightStyle — selected command row.
-	highlightStyle = lipgloss.NewStyle().
+	// highlightStyle — selected command row (inherits lineBase).
+	highlightStyle = lineBase.
 			Background(lipgloss.Color("4")). // blue background
 			Foreground(lipgloss.Color("15")) // white text
 
-	// dimStyle — normal (non-selected) command rows.
-	dimStyle = lipgloss.NewStyle().
+	// dimStyle — normal (non-selected) command rows (inherits lineBase).
+	dimStyle = lineBase.
 			Foreground(lipgloss.Color("15"))
 )
 
@@ -47,6 +48,12 @@ type Palette struct {
 	index    int
 	matches  []command.Executor
 	registry *command.Registry
+	width    int
+}
+
+// SetWidth stores the terminal width used for rendering.
+func (p *Palette) SetWidth(w int) {
+	p.width = w
 }
 
 // New creates a new Palette backed by the given command registry.
@@ -167,28 +174,23 @@ func (p *Palette) Height() int {
 
 // Render returns the styled command palette content, or an empty string
 // when there is nothing to show.
-func (p *Palette) Render(width int) string {
-	paletteWidth := width - 2
-	if paletteWidth < 20 {
-		paletteWidth = 20
-	}
-
+func (p *Palette) Render() string {
+	paletteWidth := p.width
 	if len(p.matches) == 0 {
 		msg := "无匹配命令"
 		if p.filter == "" {
 			msg = "输入命令名称进行搜索..."
 		}
-		style := popupStyle.Width(paletteWidth)
-		return style.Render(dimStyle.Render(msg))
+		return dimStyle.Width(paletteWidth).Render(msg)
 	}
 
 	lines := make([]string, 0, len(p.matches))
 	for i, cmd := range p.matches {
 		line := fmt.Sprintf("/%-12s %s", cmd.Name(), cmd.Description())
 		if i == p.index {
-			line = highlightStyle.Render(line)
+			line = highlightStyle.Width(paletteWidth).Render(line)
 		} else {
-			line = dimStyle.Render(line)
+			line = dimStyle.Width(paletteWidth).Render(line)
 		}
 		lines = append(lines, line)
 	}
@@ -200,6 +202,5 @@ func (p *Palette) Render(width int) string {
 	end := min(start+maxPaletteRows, len(lines))
 	visible := lines[start:end]
 
-	style := popupStyle.Width(paletteWidth)
-	return style.Render(lipgloss.JoinVertical(lipgloss.Left, visible...))
+	return lipgloss.JoinVertical(lipgloss.Left, visible...)
 }

@@ -11,6 +11,7 @@ import (
 func (m *model) adjustLayout() {
 	m.editor.SetWidth(m.width - 2)
 	m.output.SetWidth(m.width - 2)
+	m.palette.SetWidth(m.width - 2)
 
 	paletteHeight := m.palette.Height()
 	editorHeight := m.editor.Height()
