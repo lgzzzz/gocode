@@ -13,6 +13,8 @@ type Component interface {
 	// MsgID returns a unique identifier for this component, used for in-place updates.
 	// Empty string means the component is not updatable.
 	MsgID() string
+	// Content returns the current content of the component.
+	Content() string
 	// Render returns the component rendered as a string for the given terminal width.
 	Render(width int) string
 	// SetContent updates the component's content in place.

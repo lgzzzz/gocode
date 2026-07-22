@@ -6,20 +6,20 @@ import (
 
 // ---- streaming helpers ----
 
-// applyStreamUpdate finds or creates a streaming component (assistant / thinking)
-// and updates its content in-place.
+// applyStreamUpdate creates or updates a streaming component (assistant / thinking)
+// in-place via the history's Upsert method.
 func (m *model) applyStreamUpdate(msg progressMsg) {
 	kind := componentTypeStr(msg.typ)
-	if m.history.UpdateByID(msg.id, kind, msg.content) {
-		return
-	}
-	// Not found — append new streaming component.
+	var c compoent.Component
 	switch kind {
 	case "assistant":
-		m.history.Append(compoent.NewAssistantMessage(msg.id, msg.content))
+		c = compoent.NewAssistantMessage(msg.id, msg.content)
 	case "thinking":
-		m.history.Append(compoent.NewThinkingMessage(msg.id, msg.content))
+		c = compoent.NewThinkingMessage(msg.id, msg.content)
+	default:
+		return
 	}
+	m.history.Upsert(c)
 }
 
 // applyToolResult finds the matching tool-call component and sets its result,

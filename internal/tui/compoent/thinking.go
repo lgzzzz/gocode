@@ -16,8 +16,9 @@ func NewThinkingMessage(id, content string) *ThinkingMessage {
 	return m
 }
 
-func (m *ThinkingMessage) Type() string  { return "thinking" }
-func (m *ThinkingMessage) MsgID() string { return m.id }
+func (m *ThinkingMessage) Type() string    { return "thinking" }
+func (m *ThinkingMessage) MsgID() string   { return m.id }
+func (m *ThinkingMessage) Content() string { return m.content }
 
 func (m *ThinkingMessage) SetContent(content string) {
 	if m.content == content {

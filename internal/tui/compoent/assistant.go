@@ -16,8 +16,9 @@ func NewAssistantMessage(id, content string) *AssistantMessage {
 	return m
 }
 
-func (m *AssistantMessage) Type() string  { return "assistant" }
-func (m *AssistantMessage) MsgID() string { return m.id }
+func (m *AssistantMessage) Type() string    { return "assistant" }
+func (m *AssistantMessage) MsgID() string   { return m.id }
+func (m *AssistantMessage) Content() string { return m.content }
 
 func (m *AssistantMessage) SetContent(content string) {
 	if m.content == content {

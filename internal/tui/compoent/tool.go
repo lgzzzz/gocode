@@ -66,8 +66,9 @@ func (m *ToolMessage) SetError() {
 	m.invalidateCache()
 }
 
-func (m *ToolMessage) Type() string  { return "tool" }
-func (m *ToolMessage) MsgID() string { return m.id }
+func (m *ToolMessage) Type() string    { return "tool" }
+func (m *ToolMessage) MsgID() string   { return m.id }
+func (m *ToolMessage) Content() string { return m.result }
 
 func (m *ToolMessage) SetContent(content string) {
 	if m.result == content {

@@ -15,8 +15,9 @@ func NewUserMessage(content string) *UserMessage {
 	return m
 }
 
-func (m *UserMessage) Type() string  { return "user" }
-func (m *UserMessage) MsgID() string { return "" }
+func (m *UserMessage) Type() string    { return "user" }
+func (m *UserMessage) MsgID() string   { return "" }
+func (m *UserMessage) Content() string { return m.content }
 
 func (m *UserMessage) SetContent(content string) {
 	if m.content == content {

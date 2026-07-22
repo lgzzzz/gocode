@@ -15,8 +15,9 @@ func NewSystemMessage(content string) *SystemMessage {
 	return m
 }
 
-func (m *SystemMessage) Type() string  { return "system" }
-func (m *SystemMessage) MsgID() string { return "" }
+func (m *SystemMessage) Type() string    { return "system" }
+func (m *SystemMessage) MsgID() string   { return "" }
+func (m *SystemMessage) Content() string { return m.content }
 
 func (m *SystemMessage) SetContent(content string) {
 	if m.content == content {

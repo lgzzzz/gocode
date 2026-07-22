@@ -15,8 +15,9 @@ func NewErrorMessage(content string) *ErrorMessage {
 	return m
 }
 
-func (m *ErrorMessage) Type() string  { return "error" }
-func (m *ErrorMessage) MsgID() string { return "" }
+func (m *ErrorMessage) Type() string    { return "error" }
+func (m *ErrorMessage) MsgID() string   { return "" }
+func (m *ErrorMessage) Content() string { return m.content }
 
 func (m *ErrorMessage) SetContent(content string) {
 	if m.content == content {

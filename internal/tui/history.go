@@ -16,17 +16,23 @@ func (h *History) Append(c compoent.Component) {
 	h.dirty = true
 }
 
-// UpdateByID searches backwards for a component matching id and kind,
-// updates its content in-place, and marks the history dirty.
-// Returns false when no matching component is found.
-func (h *History) UpdateByID(id, kind string, content string) bool {
+// Upsert searches backwards for a component with the same MsgID and Type,
+// updates its content in-place if found, otherwise appends a new entry.
+// Components with an empty MsgID are always appended (never matched).
+// Returns true when an existing component was updated, false when appended.
+func (h *History) Upsert(c compoent.Component) bool {
+	if c.MsgID() == "" {
+		h.Append(c)
+		return false
+	}
 	for i := len(h.items) - 1; i >= 0; i-- {
-		if h.items[i].MsgID() == id && h.items[i].Type() == kind {
-			h.items[i].SetContent(content)
+		if h.items[i].MsgID() == c.MsgID() && h.items[i].Type() == c.Type() {
+			h.items[i].SetContent(c.Content())
 			h.dirty = true
 			return true
 		}
 	}
+	h.Append(c)
 	return false
 }
 
