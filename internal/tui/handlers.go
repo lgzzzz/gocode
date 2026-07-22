@@ -15,12 +15,12 @@ func (m *model) handleKeyPress(msg tea.KeyPressMsg) []tea.Cmd {
 
 	k := msg.Key()
 
-	// Always forward to input (except for special keys that we handle first).
+	// Always forward to editor (except for special keys that we handle first).
 	switch {
 	case k.Code == tea.KeyUp || k.Code == tea.KeyDown:
-		cmds = append(cmds, m.updateInput(msg)...)
+		cmds = append(cmds, m.updateEditor(msg)...)
 	default:
-		cmds = append(cmds, m.updateInput(msg)...)
+		cmds = append(cmds, m.updateEditor(msg)...)
 	}
 
 	// Special key bindings (quit, submit, etc.)
@@ -51,16 +51,16 @@ func (m *model) handleKeyPress(msg tea.KeyPressMsg) []tea.Cmd {
 func (m *model) handleWindowSizeMsg(msg tea.WindowSizeMsg) []tea.Cmd {
 	m.width = msg.Width
 	m.height = msg.Height
-	m.dirty = true // width changed, need re-render
-	// WindowSizeMsg still needs to reach input and viewport so they
+	m.history.MarkDirty() // width changed, need re-render
+	// WindowSizeMsg still needs to reach editor and output so they
 	// can adjust their own internal sizes.
-	return append(m.updateInput(msg), m.updateViewportModel(msg)...)
+	return append(m.updateEditor(msg), m.updateOutput(msg)...)
 }
 
 // handleProgressMsg processes agent callback messages (streaming, tool calls, etc.).
 func (m *model) handleProgressMsg(msg progressMsg) []tea.Cmd {
 	if msg.err != nil {
-		m.appendLog(compoent.NewErrorMessage(msg.err.Error()))
+		m.history.Append(compoent.NewErrorMessage(msg.err.Error()))
 		return nil
 	}
 
@@ -76,13 +76,13 @@ func (m *model) handleProgressMsg(msg progressMsg) []tea.Cmd {
 		m.applyStreamUpdate(msg)
 
 	case agent.MsgToolCall:
-		m.appendLog(compoent.NewToolMessage(msg.id, msg.toolName, msg.toolArgs))
+		m.history.Append(compoent.NewToolMessage(msg.id, msg.toolName, msg.toolArgs))
 
 	case agent.MsgToolResult:
 		m.applyToolResult(msg)
 
 	default:
-		m.appendLog(compoent.NewAssistantMessage(msg.id, msg.content))
+		m.history.Append(compoent.NewAssistantMessage(msg.id, msg.content))
 	}
 
 	if m.ch != nil {

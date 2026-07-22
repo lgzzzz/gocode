@@ -14,14 +14,14 @@ import (
 
 // ---- agent actions ----
 
-// submitTask sends the current input to the agent for processing.
+// submitTask sends the current editor content to the agent for processing.
 func (m *model) submitTask() tea.Cmd {
-	input := strings.TrimSpace(m.input.Value())
+	input := strings.TrimSpace(m.editor.Value())
 	if input == "" {
 		return nil
 	}
-	m.input.Reset()
-	m.appendLog(compoent.NewUserMessage(input))
+	m.editor.Reset()
+	m.history.Append(compoent.NewUserMessage(input))
 	m.running = true
 
 	ctx, cancel := context.WithCancel(context.Background())

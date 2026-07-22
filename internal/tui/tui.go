@@ -13,24 +13,22 @@ import (
 	"github.com/charmbracelet/x/term"
 
 	"github.com/lgzzzz/gocode/internal/agent"
-	"github.com/lgzzzz/gocode/internal/tui/compoent"
 )
 
 // ---- model ----
 
 type model struct {
-	input    textarea.Model
-	viewport viewport.Model
-	agent    *agent.Agent
-	log      []compoent.Component
-	width    int
-	height   int
-	running  bool
-	cancel   context.CancelFunc // cancels the running agent context
-	ch       chan progressMsg
+	editor  textarea.Model
+	output  viewport.Model
+	agent   *agent.Agent
+	history History
+	width   int
+	height  int
+	running bool
+	cancel  context.CancelFunc // cancels the running agent context
+	ch      chan progressMsg
 
 	lastContent string // track content to detect when it changes (for auto-scroll)
-	dirty       bool   // true when log needs re-rendering
 }
 
 // NewModel creates a new TUI model.
@@ -57,18 +55,18 @@ func NewModel(ag *agent.Agent) tea.Model {
 	ta.Focus() // 初始获得焦点
 
 	m := model{
-		input:    ta,
-		viewport: viewport.New(),
-		agent:    ag,
-		width:    width,
-		height:   height,
+		editor: ta,
+		output: viewport.New(),
+		agent:  ag,
+		width:  width,
+		height: height,
 	}
 	m.adjustLayout()
 	return m
 }
 
 func (m model) Init() tea.Cmd {
-	return m.input.Focus()
+	return m.editor.Focus()
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -76,9 +74,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	switch msg := msg.(type) {
 	case tea.MouseWheelMsg:
-		cmds = append(cmds, m.updateViewportModel(msg)...)
+		cmds = append(cmds, m.updateOutput(msg)...)
 	case tea.PasteMsg:
-		cmds = append(cmds, m.updateInput(msg)...)
+		cmds = append(cmds, m.updateEditor(msg)...)
 	case tea.KeyPressMsg:
 		cmds = append(cmds, m.handleKeyPress(msg)...)
 	case tea.WindowSizeMsg:
@@ -88,7 +86,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	m.adjustLayout()
-	m.updateViewport()
+	m.renderOutput()
 
 	return m, tea.Batch(cmds...)
 }
@@ -103,27 +101,27 @@ func (m model) View() tea.View {
 		return v
 	}
 
-	var inputArea string
+	var editorArea string
 	if m.running {
-		inputArea = inputBarDimStyle.Render("⏳ Processing... (Esc to stop)")
+		editorArea = inputBarDimStyle.Render("⏳ Processing... (Esc to stop)")
 	} else {
-		inputArea = m.input.View()
+		editorArea = m.editor.View()
 	}
 
-	// Put input area inside the viewport at the bottom
-	vpContent := m.viewport.View()
+	// Place the editor below the output area.
+	outputContent := m.output.View()
 	v.SetContent(lipgloss.JoinVertical(lipgloss.Left,
-		vpContent,
+		outputContent,
 		"",
-		inputArea,
+		editorArea,
 	))
 
-	// Set real cursor position for the textarea.
-	// The textarea cursor is relative to its own top-left; offset it by the
-	// viewport height + 1 blank line to match its position in the full view.
+	// Set real cursor position for the editor.
+	// The editor cursor is relative to its own top-left; offset it by the
+	// output height + 1 blank line to match its position in the full view.
 	if !m.running {
-		if c := m.input.Cursor(); c != nil {
-			c.Position.Y += m.viewport.Height() + 1
+		if c := m.editor.Cursor(); c != nil {
+			c.Position.Y += m.output.Height() + 1
 			v.Cursor = c
 		}
 	}
@@ -131,14 +129,8 @@ func (m model) View() tea.View {
 	return v
 }
 
-// appendLog adds a component to the log and marks it dirty for re-render.
-func (m *model) appendLog(c compoent.Component) {
-	m.log = append(m.log, c)
-	m.dirty = true
-}
-
 func (m *model) adjustLayout() {
-	m.input.SetWidth(m.width - 2)
-	m.viewport.SetWidth(m.width - 2)
-	m.viewport.SetHeight(max(0, m.height-m.input.Height()-1))
+	m.editor.SetWidth(m.width - 2)
+	m.output.SetWidth(m.width - 2)
+	m.output.SetHeight(max(0, m.height-m.editor.Height()-1))
 }
