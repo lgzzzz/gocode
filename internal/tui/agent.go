@@ -3,36 +3,19 @@ package tui
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/lgzzzz/gocode/internal/agent"
-	"github.com/lgzzzz/gocode/internal/store"
-	"github.com/lgzzzz/gocode/internal/tui/compoent"
 )
 
 // ---- agent actions ----
 
-// startAgent sends the current editor content to the agent for processing.
-func (m *model) startAgent() tea.Cmd {
-	input := strings.TrimSpace(m.editor.Value())
-	if input == "" {
-		return nil
-	}
-	m.editor.Reset()
-	m.history.Append(compoent.NewUserMessage(input))
+// startAgent launches the agent with the given input string.
+// The caller is responsible for input validation, UI cleanup
+// (editor reset, history append), and persistence.
+func (m *model) startAgent(input string) tea.Cmd {
 	m.running = true
-
-	// Persist user message.
-	if m.store != nil {
-		m.store.AppendMessage(store.Message{
-			SessionID: m.sessionID,
-			Role:      "user",
-			MsgType:   "user_message",
-			Content:   input,
-		})
-	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	m.cancel = cancel

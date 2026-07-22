@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"strings"
+
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/lgzzzz/gocode/internal/agent"
@@ -74,7 +76,24 @@ func (m *model) handleKeyPress(msg tea.KeyPressMsg) []tea.Cmd {
 
 	case "enter":
 		if !m.running {
-			cmd := m.startAgent()
+			input := strings.TrimSpace(m.editor.Value())
+			if input == "" {
+				return cmds
+			}
+			m.editor.Reset()
+			m.history.Append(compoent.NewUserMessage(input))
+
+			// Persist user message.
+			if m.store != nil {
+				m.store.AppendMessage(store.Message{
+					SessionID: m.sessionID,
+					Role:      "user",
+					MsgType:   "user_message",
+					Content:   input,
+				})
+			}
+
+			cmd := m.startAgent(input)
 			if cmd != nil {
 				cmds = append(cmds, cmd)
 			}
