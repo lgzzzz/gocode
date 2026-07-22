@@ -37,7 +37,8 @@ type ModelAccess interface {
 	ClearHistory()
 	NewSession() // creates a new session in store and clears TUI history
 	AppendSystemMessage(content string)
-	ListSessions() string // returns formatted list of recent sessions
+	ListSessions() string       // returns formatted list of recent sessions
+	EnterSessionBrowser()       // activates the interactive session browser
 }
 
 // ---- Command Result ----

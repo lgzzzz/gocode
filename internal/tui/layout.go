@@ -16,7 +16,12 @@ func (m *model) adjustLayout() {
 	paletteHeight := m.palette.Height()
 	editorHeight := m.editor.Height()
 	totalBottom := editorHeight + paletteHeight + 1 // +1 for spacing
-	m.output.SetHeight(max(0, m.height-totalBottom))
+	outputHeight := max(0, m.height-totalBottom)
+	m.output.SetHeight(outputHeight)
+
+	if m.sessionBrowser != nil {
+		m.sessionBrowser.SetSize(m.width-2, outputHeight)
+	}
 }
 
 // handleWindowSizeMsg updates dimensions on terminal resize.

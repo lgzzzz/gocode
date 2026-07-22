@@ -18,6 +18,7 @@ type SessionInfo struct {
 	Model        string
 	CWD          string
 	MessageCount int
+	FirstMsg     string // first user message, for list display
 }
 
 // Message represents a single persisted message.
@@ -76,11 +77,14 @@ func (s *Store) UpdateSessionTime(sessionID string) {
 }
 
 // ListSessions returns up to limit most recent sessions (by created_at DESC)
-// with their message counts.
+// with their message counts and the first user message.
 func (s *Store) ListSessions(limit int) ([]SessionInfo, error) {
 	rows, err := s.db.Query(
 		`SELECT s.id, s.created_at, s.updated_at, s.model, s.cwd,
-		        COUNT(m.id) AS msg_count
+		        COUNT(m.id) AS msg_count,
+		        (SELECT m2.content FROM messages m2
+		         WHERE m2.session_id = s.id AND m2.msg_type = 'user'
+		         ORDER BY m2.seq LIMIT 1) AS first_msg
 		 FROM sessions s
 		 LEFT JOIN messages m ON m.session_id = s.id
 		 GROUP BY s.id
@@ -96,8 +100,12 @@ func (s *Store) ListSessions(limit int) ([]SessionInfo, error) {
 	var result []SessionInfo
 	for rows.Next() {
 		var si SessionInfo
-		if err := rows.Scan(&si.ID, &si.CreatedAt, &si.UpdatedAt, &si.Model, &si.CWD, &si.MessageCount); err != nil {
+		var firstMsg sql.NullString
+		if err := rows.Scan(&si.ID, &si.CreatedAt, &si.UpdatedAt, &si.Model, &si.CWD, &si.MessageCount, &firstMsg); err != nil {
 			return nil, fmt.Errorf("store: scan session: %w", err)
+		}
+		if firstMsg.Valid {
+			si.FirstMsg = firstMsg.String
 		}
 		result = append(result, si)
 	}
@@ -152,6 +160,36 @@ func (s *Store) AppendMessage(msg Message) error {
 	}
 
 	return tx.Commit()
+}
+
+// GetSessionMessages returns all messages for the given session,
+// ordered by seq ascending.
+func (s *Store) GetSessionMessages(sessionID string) ([]Message, error) {
+	rows, err := s.db.Query(
+		`SELECT session_id, seq, msg_type, content,
+		        tool_name, tool_args, tool_call_id, has_error, created_at
+		 FROM messages
+		 WHERE session_id = ?
+		 ORDER BY seq ASC`,
+		sessionID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("store: get session messages: %w", err)
+	}
+	defer rows.Close()
+
+	var result []Message
+	for rows.Next() {
+		var msg Message
+		if err := rows.Scan(
+			&msg.SessionID, &msg.Seq, &msg.MsgType, &msg.Content,
+			&msg.ToolName, &msg.ToolArgs, &msg.ToolCallID, &msg.HasError, &msg.CreatedAt,
+		); err != nil {
+			return nil, fmt.Errorf("store: scan message: %w", err)
+		}
+		result = append(result, msg)
+	}
+	return result, rows.Err()
 }
 
 // ---- helpers ----

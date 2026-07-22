@@ -376,6 +376,92 @@ func (a *Agent) ClearHistory() {
 	a.history = nil
 }
 
+// SetHistory replaces the conversation history with the given messages.
+// This is used when loading a previous session.
+func (a *Agent) SetHistory(history []openai.ChatCompletionMessageParamUnion) {
+	a.history = history
+}
+
+// SystemPrompt returns the system prompt string.
+func (a *Agent) SystemPrompt() string {
+	return a.systemPrompt()
+}
+
+// ---- history reconstruction ----
+
+// HistoryMessage is a simplified representation of a persisted message,
+// used by ReconstructHistory to rebuild the OpenAI conversation format.
+type HistoryMessage struct {
+	MsgType    string // "user" | "assistant" | "thinking" | "tool_call" | "tool_result"
+	Content    string
+	ToolCallID string
+	ToolName   string
+	ToolArgs   string
+}
+
+// ReconstructHistory rebuilds an OpenAI-compatible conversation history
+// from persisted messages. thinking messages are skipped (not part of
+// the OpenAI conversation format). tool_call / tool_result pairs are
+// embedded into the preceding assistant message.
+func ReconstructHistory(msgs []HistoryMessage, systemPrompt string) []openai.ChatCompletionMessageParamUnion {
+	history := []openai.ChatCompletionMessageParamUnion{
+		openai.SystemMessage(systemPrompt),
+	}
+
+	i := 0
+	for i < len(msgs) {
+		m := msgs[i]
+
+		switch m.MsgType {
+		case "user":
+			history = append(history, openai.UserMessage(m.Content))
+			i++
+
+		case "assistant":
+			// Collect tool_calls that immediately follow this assistant message.
+			var toolCalls []openai.ChatCompletionMessageToolCallParam
+			j := i + 1
+			for j < len(msgs) && msgs[j].MsgType == "tool_call" {
+				tc := msgs[j]
+				toolCalls = append(toolCalls, openai.ChatCompletionMessageToolCallParam{
+					ID:   tc.ToolCallID,
+					Type: "function",
+					Function: openai.ChatCompletionMessageToolCallFunctionParam{
+						Name:      tc.ToolName,
+						Arguments: tc.ToolArgs,
+					},
+				})
+				j++
+			}
+
+			assistantMsg := openai.AssistantMessage(m.Content)
+			if len(toolCalls) > 0 {
+				assistantMsg.OfAssistant.ToolCalls = toolCalls
+			}
+			history = append(history, assistantMsg)
+
+			// Collect tool_results that follow the tool_calls.
+			for j < len(msgs) && msgs[j].MsgType == "tool_result" {
+				tr := msgs[j]
+				history = append(history, openai.ToolMessage(tr.Content, tr.ToolCallID))
+				j++
+			}
+
+			i = j
+
+		case "thinking", "tool_call", "tool_result":
+			// thinking: not part of OpenAI conversation format.
+			// tool_call / tool_result: handled inside the assistant loop above.
+			i++
+
+		default:
+			i++
+		}
+	}
+
+	return history
+}
+
 // systemPrompt builds the system prompt dynamically from the available tool definitions,
 // matching the structure and style of pi's system prompt construction.
 func (a *Agent) systemPrompt() string {

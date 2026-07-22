@@ -35,9 +35,10 @@ type model struct {
 	cancel  context.CancelFunc // cancels the running agent context
 	ch      chan progressMsg
 
-	store     *store.Store // session persistence (nil if unavailable)
-	sessionID string       // current session UUID
-	cwd       string       // current working directory when session was created
+	store          *store.Store     // session persistence (nil if unavailable)
+	sessionID      string           // current session UUID
+	cwd            string           // current working directory when session was created
+	sessionBrowser *SessionBrowser  // session list browser (nil when inactive)
 }
 
 // NewModel creates a new TUI model.
@@ -136,14 +137,19 @@ func (m model) View() tea.View {
 	}
 
 	// Place the editor below the output area.
-	outputContent := m.output.View()
+	var middleArea string
+	if m.sessionBrowser != nil {
+		middleArea = m.sessionBrowser.View()
+	} else {
+		middleArea = m.output.View()
+	}
 	v.SetContent(lipgloss.JoinVertical(lipgloss.Left,
-		outputContent,
+		middleArea,
 		"",
 		editorArea,
 	))
 
-	if !m.running {
+	if !m.running && m.sessionBrowser == nil {
 		if c := m.editor.Cursor(); c != nil {
 			c.Position.Y += m.output.Height() + 1
 			if m.palette.Active() {

@@ -16,6 +16,26 @@ import (
 func (m *model) handleKeyPress(msg tea.KeyPressMsg) []tea.Cmd {
 	var cmds []tea.Cmd
 
+	// ---- session browser mode ----
+	if m.sessionBrowser != nil {
+		switch msg.String() {
+		case "esc", "ctrl+c":
+			m.ExitSessionBrowser()
+			return nil
+		case "enter":
+			if sel := m.sessionBrowser.Selected(); sel != nil {
+				m.LoadSession(sel.ID)
+			}
+			return nil
+		default:
+			_, cmd := m.sessionBrowser.Update(msg)
+			if cmd != nil {
+				return []tea.Cmd{cmd}
+			}
+			return nil
+		}
+	}
+
 	k := msg.Key()
 
 	// ---- command mode: intercept special keys ----

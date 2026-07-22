@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/lgzzzz/gocode/internal/agent"
 	"github.com/lgzzzz/gocode/internal/store"
 	"github.com/lgzzzz/gocode/internal/tui/compoent"
 )
@@ -52,4 +53,87 @@ func (m *model) ListSessions() string {
 			timeStr, s.Model, s.MessageCount, s.CWD, marker))
 	}
 	return sb.String()
+}
+
+// ---- session browser ----
+
+// EnterSessionBrowser loads sessions from the store and activates
+// the interactive session browser, replacing the output viewport.
+func (m *model) EnterSessionBrowser() {
+	if m.store == nil {
+		m.history.Append(compoent.NewSystemMessage("📭 会话存储不可用"))
+		return
+	}
+	sessions, err := m.store.ListSessions(50)
+	if err != nil {
+		m.history.Append(compoent.NewErrorMessage(err.Error()))
+		return
+	}
+	if len(sessions) == 0 {
+		m.history.Append(compoent.NewSystemMessage("📭 暂无历史会话"))
+		return
+	}
+	m.sessionBrowser = NewSessionBrowser(m.width, m.output.Height(), m.sessionID)
+	m.sessionBrowser.SetSessions(sessions, m.sessionID)
+}
+
+// ExitSessionBrowser deactivates the session browser and restores
+// the normal output viewport.
+func (m *model) ExitSessionBrowser() {
+	m.sessionBrowser = nil
+}
+
+// LoadSession loads all messages from the given session and rebuilds
+// both the TUI history and the agent's conversation history.
+func (m *model) LoadSession(sessionID string) {
+	if m.store == nil {
+		return
+	}
+
+	msgs, err := m.store.GetSessionMessages(sessionID)
+	if err != nil {
+		m.history.Append(compoent.NewErrorMessage(err.Error()))
+		return
+	}
+
+	// 1. Rebuild TUI history: iterate and pair tool_call/tool_result.
+	m.history.Clear()
+	for i := 0; i < len(msgs); i++ {
+		msg := msgs[i]
+		switch msg.MsgType {
+		case "user":
+			m.history.Append(compoent.NewUserMessage(msg.Content))
+		case "assistant":
+			if msg.Content != "" {
+				m.history.Append(compoent.NewAssistantMessage(msg.ToolCallID, msg.Content))
+			}
+		case "thinking":
+			m.history.Append(compoent.NewThinkingMessage(msg.ToolCallID, msg.Content))
+		case "tool_call":
+			tm := compoent.NewToolMessage(msg.ToolCallID, msg.ToolName, msg.ToolArgs)
+			m.history.Append(tm)
+		case "tool_result":
+			hasErr := msg.HasError
+			m.history.UpdateToolResult(msg.ToolCallID, msg.Content, hasErr)
+		}
+	}
+
+	// 2. Rebuild Agent history.
+	agentMsgs := make([]agent.HistoryMessage, len(msgs))
+	for i, m := range msgs {
+		agentMsgs[i] = agent.HistoryMessage{
+			MsgType:    m.MsgType,
+			Content:    m.Content,
+			ToolCallID: m.ToolCallID,
+			ToolName:   m.ToolName,
+			ToolArgs:   m.ToolArgs,
+		}
+	}
+	openaiHistory := agent.ReconstructHistory(agentMsgs, m.agent.SystemPrompt())
+	m.agent.SetHistory(openaiHistory)
+
+	// 3. Switch to the loaded session.
+	m.sessionID = sessionID
+	m.sessionBrowser = nil
+	m.output.GotoBottom()
 }
