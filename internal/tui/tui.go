@@ -131,6 +131,12 @@ func (m model) View() tea.View {
 	return v
 }
 
+// appendLog adds a component to the log and marks it dirty for re-render.
+func (m *model) appendLog(c compoent.Component) {
+	m.log = append(m.log, c)
+	m.dirty = true
+}
+
 func (m *model) adjustLayout() {
 	m.input.SetWidth(m.width - 2)
 	m.viewport.SetWidth(m.width - 2)

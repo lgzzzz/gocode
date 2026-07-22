@@ -60,10 +60,7 @@ func (m *model) handleWindowSizeMsg(msg tea.WindowSizeMsg) []tea.Cmd {
 // handleProgressMsg processes agent callback messages (streaming, tool calls, etc.).
 func (m *model) handleProgressMsg(msg progressMsg) []tea.Cmd {
 	if msg.err != nil {
-		m.log = append(m.log,
-			compoent.NewErrorMessage(msg.err.Error()),
-		)
-		m.dirty = true
+		m.appendLog(compoent.NewErrorMessage(msg.err.Error()))
 		return nil
 	}
 
@@ -79,16 +76,13 @@ func (m *model) handleProgressMsg(msg progressMsg) []tea.Cmd {
 		m.applyStreamUpdate(msg)
 
 	case agent.MsgToolCall:
-		m.log = append(m.log, compoent.NewToolMessage(msg.id, msg.toolName, msg.toolArgs))
-		m.dirty = true
+		m.appendLog(compoent.NewToolMessage(msg.id, msg.toolName, msg.toolArgs))
 
 	case agent.MsgToolResult:
 		m.applyToolResult(msg)
-		m.dirty = true
 
 	default:
-		m.log = append(m.log, compoent.NewAssistantMessage(msg.id, msg.content))
-		m.dirty = true
+		m.appendLog(compoent.NewAssistantMessage(msg.id, msg.content))
 	}
 
 	if m.ch != nil {

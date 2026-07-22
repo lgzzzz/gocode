@@ -21,10 +21,7 @@ func (m *model) submitTask() tea.Cmd {
 		return nil
 	}
 	m.input.Reset()
-	m.log = append(m.log,
-		compoent.NewUserMessage(input),
-	)
-	m.dirty = true
+	m.appendLog(compoent.NewUserMessage(input))
 	m.running = true
 
 	ctx, cancel := context.WithCancel(context.Background())

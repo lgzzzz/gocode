@@ -20,11 +20,10 @@ func (m *model) applyStreamUpdate(msg progressMsg) {
 	// Not found — append new streaming component.
 	switch kind {
 	case "assistant":
-		m.log = append(m.log, compoent.NewAssistantMessage(msg.id, msg.content))
+		m.appendLog(compoent.NewAssistantMessage(msg.id, msg.content))
 	case "thinking":
-		m.log = append(m.log, compoent.NewThinkingMessage(msg.id, msg.content))
+		m.appendLog(compoent.NewThinkingMessage(msg.id, msg.content))
 	}
-	m.dirty = true
 }
 
 // applyToolResult finds the matching tool-call component and sets its result,
@@ -48,6 +47,5 @@ func (m *model) applyToolResult(msg progressMsg) {
 	if msg.toolErr != nil {
 		tm.SetError()
 	}
-	m.log = append(m.log, tm)
-	m.dirty = true
+	m.appendLog(tm)
 }
