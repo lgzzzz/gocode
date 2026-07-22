@@ -14,6 +14,7 @@ import (
 
 	"github.com/lgzzzz/gocode/internal/agent"
 	"github.com/lgzzzz/gocode/internal/command"
+	"github.com/lgzzzz/gocode/internal/store"
 	"github.com/lgzzzz/gocode/internal/tui/history"
 	"github.com/lgzzzz/gocode/internal/tui/palette"
 )
@@ -33,10 +34,13 @@ type model struct {
 	running bool
 	cancel  context.CancelFunc // cancels the running agent context
 	ch      chan progressMsg
+
+	store     *store.Store // session persistence (nil if unavailable)
+	sessionID string       // current session UUID
 }
 
 // NewModel creates a new TUI model.
-func NewModel(ag *agent.Agent) tea.Model {
+func NewModel(ag *agent.Agent, st *store.Store) tea.Model {
 	width, height, err := term.GetSize(os.Stdout.Fd())
 	if err != nil {
 		width, height = 80, 24
@@ -55,17 +59,28 @@ func NewModel(ag *agent.Agent) tea.Model {
 	styles.Cursor.BlinkSpeed = 500 * time.Millisecond
 	ta.SetStyles(styles)
 	ta.Focus() // 初始获得焦点
+
 	// Initialize command registry and palette.
 	reg := command.NewRegistry()
 	reg.Register(&command.NewCommand{})
+	reg.Register(&command.SessionsCommand{})
+
+	// Create a new session in the store.
+	var sessionID string
+	if st != nil {
+		cwd, _ := os.Getwd()
+		sessionID, _ = st.CreateSession(ag.Model(), cwd)
+	}
 
 	m := model{
-		editor:  ta,
-		output:  viewport.New(),
-		agent:   ag,
-		width:   width,
-		height:  height,
-		palette: palette.New(reg),
+		editor:    ta,
+		output:    viewport.New(),
+		agent:     ag,
+		width:     width,
+		height:    height,
+		palette:   palette.New(reg),
+		store:     st,
+		sessionID: sessionID,
 	}
 	m.adjustLayout()
 	return m

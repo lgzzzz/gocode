@@ -36,6 +36,7 @@ type ModelAccess interface {
 	CancelAgent()
 	ClearHistory()
 	AppendSystemMessage(content string)
+	ListSessions() string // returns formatted list of recent sessions
 }
 
 // ---- Command Result ----

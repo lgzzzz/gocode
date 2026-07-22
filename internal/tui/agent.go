@@ -8,6 +8,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/lgzzzz/gocode/internal/agent"
+	"github.com/lgzzzz/gocode/internal/store"
 	"github.com/lgzzzz/gocode/internal/tui/compoent"
 )
 
@@ -22,6 +23,16 @@ func (m *model) startAgent() tea.Cmd {
 	m.editor.Reset()
 	m.history.Append(compoent.NewUserMessage(input))
 	m.running = true
+
+	// Persist user message.
+	if m.store != nil {
+		m.store.AppendMessage(store.Message{
+			SessionID: m.sessionID,
+			Role:      "user",
+			MsgType:   "user_message",
+			Content:   input,
+		})
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	m.cancel = cancel

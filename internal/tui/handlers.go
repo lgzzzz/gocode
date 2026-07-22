@@ -4,6 +4,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/lgzzzz/gocode/internal/agent"
+	"github.com/lgzzzz/gocode/internal/store"
 	"github.com/lgzzzz/gocode/internal/tui/compoent"
 )
 
@@ -98,6 +99,9 @@ func (m *model) handleProgressMsg(msg progressMsg) []tea.Cmd {
 		return nil
 	}
 
+	// Persist complete messages (streaming messages are skipped inside).
+	m.persistMessage(msg)
+
 	switch msg.typ {
 	case agent.MsgAssistantStream, agent.MsgThinkingStream:
 		m.applyStreamUpdate(msg)
@@ -109,7 +113,7 @@ func (m *model) handleProgressMsg(msg progressMsg) []tea.Cmd {
 		m.history.Append(compoent.NewToolMessage(msg.id, msg.toolName, msg.toolArgs))
 
 	case agent.MsgError, agent.MsgRetryWait:
-		// Show  and retry messages in the history
+		// Show error and retry messages in the history
 		m.history.Append(compoent.NewErrorMessage(msg.content))
 
 	default:
@@ -120,4 +124,73 @@ func (m *model) handleProgressMsg(msg progressMsg) []tea.Cmd {
 		return []tea.Cmd{waitCmd(m.ch)}
 	}
 	return nil
+}
+
+// persistMessage persists only "complete" message types to the store.
+// Streaming messages (thinking_stream, assistant_stream) are skipped.
+func (m *model) persistMessage(msg progressMsg) {
+	if m.store == nil {
+		return
+	}
+
+	sm := store.Message{
+		SessionID: m.sessionID,
+		ToolName:  msg.toolName,
+		ToolArgs:  msg.toolArgs,
+	}
+
+	switch msg.typ {
+
+	// ---- streaming messages: not persisted ----
+	case agent.MsgThinkingStream, agent.MsgAssistantStream:
+		return
+
+	// ---- complete thinking ----
+	case agent.MsgThinking:
+		sm.Role = "assistant"
+		sm.MsgType = "thinking"
+		sm.Content = msg.content
+
+	// ---- complete assistant reply ----
+	case agent.MsgAssistant:
+		sm.Role = "assistant"
+		sm.MsgType = "assistant"
+		sm.Content = msg.content
+
+	// ---- tool call ----
+	case agent.MsgToolCall:
+		sm.Role = "assistant"
+		sm.MsgType = "tool_call"
+		sm.ToolCallID = msg.id
+		sm.ToolName = msg.toolName
+		sm.ToolArgs = msg.toolArgs
+		sm.Content = msg.content
+
+	// ---- tool result ----
+	case agent.MsgToolResult:
+		sm.Role = "tool"
+		sm.MsgType = "tool_result"
+		sm.ToolCallID = msg.id
+		sm.ToolName = msg.toolName
+		sm.Content = msg.content
+		sm.HasError = msg.toolErr != nil
+
+	// ---- error ----
+	case agent.MsgError:
+		sm.Role = "system"
+		sm.MsgType = "error"
+		sm.Content = msg.content
+		sm.HasError = true
+
+	// ---- retry wait ----
+	case agent.MsgRetryWait:
+		sm.Role = "system"
+		sm.MsgType = "retry_wait"
+		sm.Content = msg.content
+
+	default:
+		return
+	}
+
+	m.store.AppendMessage(sm)
 }

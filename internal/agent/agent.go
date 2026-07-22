@@ -21,8 +21,10 @@ import (
 type MsgType string
 
 const (
-	MsgThinkingStream  MsgType = "thinking_stream"  // streaming thinking/reasoning content
-	MsgAssistantStream MsgType = "assistant_stream" // streaming assistant content
+	MsgThinkingStream  MsgType = "thinking_stream"  // streaming thinking/reasoning content (not persisted)
+	MsgAssistantStream MsgType = "assistant_stream" // streaming assistant content (not persisted)
+	MsgThinking        MsgType = "thinking"         // complete thinking/reasoning (persisted)
+	MsgAssistant       MsgType = "assistant"        // complete assistant reply (persisted)
 	MsgToolCall        MsgType = "tool_call"        // tool call issued
 	MsgToolResult      MsgType = "tool_result"      // tool execution result
 	MsgError           MsgType = "error"            // API call error (may be followed by retry)
@@ -118,9 +120,27 @@ func (a *Agent) Run(ctx context.Context, userMessage string, cb func(CallbackMsg
 		a.msgCount++
 		msgID := fmt.Sprintf("msg-%d", a.msgCount)
 
-		fullContent, toolCalls, err := a.streamOne(ctx, messages, msgID, cb)
+		fullContent, fullReasoning, toolCalls, err := a.streamOne(ctx, messages, msgID, cb)
 		if err != nil {
 			return
+		}
+
+		// Thinking complete
+		if fullReasoning != "" {
+			cb(CallbackMsg{
+				Type:    MsgThinking,
+				ID:      msgID,
+				Content: fullReasoning,
+			})
+		}
+
+		// Assistant message complete
+		if fullContent != "" {
+			cb(CallbackMsg{
+				Type:    MsgAssistant,
+				ID:      msgID,
+				Content: fullContent,
+			})
 		}
 
 		// If the model wants to call tools
@@ -203,26 +223,26 @@ func (a *Agent) streamOne(
 	messages []openai.ChatCompletionMessageParamUnion,
 	msgID string,
 	cb func(CallbackMsg),
-) (content string, toolCalls []toolCallAccum, err error) {
+) (content string, reasoning string, toolCalls []toolCallAccum, err error) {
 	const maxRetries = 3
 	baseDelay := 2 * time.Second
 
 	for attempt := 0; attempt <= maxRetries; attempt++ {
-		content, toolCalls, err = a.streamOneAttempt(ctx, messages, msgID, cb)
+		content, reasoning, toolCalls, err = a.streamOneAttempt(ctx, messages, msgID, cb)
 		if err == nil {
-			return content, toolCalls, nil
+			return content, reasoning, toolCalls, nil
 		}
 
 		// Don't retry if context is cancelled
 		if ctx.Err() != nil {
 			cb(CallbackMsg{Type: MsgError, Content: fmt.Sprintf("请求已取消: %v", ctx.Err())})
-			return "", nil, fmt.Errorf("context cancelled: %w", ctx.Err())
+			return "", "", nil, fmt.Errorf("context cancelled: %w", ctx.Err())
 		}
 
 		// Last attempt failed — return the error
 		if attempt == maxRetries {
 			cb(CallbackMsg{Type: MsgError, Content: fmt.Sprintf("API 调用失败（已重试 %d 次）: %v", maxRetries, err)})
-			return "", nil, fmt.Errorf("API call failed after %d retries: %w", maxRetries, err)
+			return "", "", nil, fmt.Errorf("API call failed after %d retries: %w", maxRetries, err)
 		}
 
 		// Report the error and notify that we'll retry
@@ -232,12 +252,12 @@ func (a *Agent) streamOne(
 
 		select {
 		case <-ctx.Done():
-			return "", nil, fmt.Errorf("context cancelled during retry wait: %w", ctx.Err())
+			return "", "", nil, fmt.Errorf("context cancelled during retry wait: %w", ctx.Err())
 		case <-time.After(baseDelay):
 		}
 	}
 
-	return "", nil, fmt.Errorf("unreachable")
+	return "", "", nil, fmt.Errorf("unreachable")
 }
 
 // streamOneAttempt performs a single streaming chat completion attempt.
@@ -246,7 +266,7 @@ func (a *Agent) streamOneAttempt(
 	messages []openai.ChatCompletionMessageParamUnion,
 	msgID string,
 	cb func(CallbackMsg),
-) (content string, toolCalls []toolCallAccum, err error) {
+) (content string, reasoning string, toolCalls []toolCallAccum, err error) {
 	stream := a.client.Chat.Completions.NewStreaming(ctx, openai.ChatCompletionNewParams{
 		Model:           a.model,
 		Messages:        messages,
@@ -254,7 +274,7 @@ func (a *Agent) streamOneAttempt(
 		ReasoningEffort: "max",
 	})
 	if stream.Err() != nil {
-		return "", nil, fmt.Errorf("API error: %w", stream.Err())
+		return "", "", nil, fmt.Errorf("API error: %w", stream.Err())
 	}
 	defer stream.Close()
 
@@ -306,7 +326,7 @@ func (a *Agent) streamOneAttempt(
 	}
 
 	if stream.Err() != nil {
-		return "", nil, fmt.Errorf("stream error: %w", stream.Err())
+		return "", "", nil, fmt.Errorf("stream error: %w", stream.Err())
 	}
 
 	// Collect accumulated tool calls in index order
@@ -316,7 +336,7 @@ func (a *Agent) streamOneAttempt(
 		}
 	}
 
-	return fullContent.String(), toolCalls, nil
+	return fullContent.String(), fullReasoning.String(), toolCalls, nil
 }
 
 // reasoningContent extracts reasoning_content from the delta raw JSON.
@@ -347,6 +367,9 @@ type toolCallAccum struct {
 	Name      string
 	Arguments string
 }
+
+// Model returns the model name used by this agent.
+func (a *Agent) Model() string { return a.model }
 
 // ClearHistory resets the conversation history for a fresh session.
 func (a *Agent) ClearHistory() {

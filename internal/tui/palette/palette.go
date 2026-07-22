@@ -76,6 +76,8 @@ func (p *Palette) UpdateFilter(editorText string) {
 		p.matches = p.registry.Filter(filterWord)
 
 		if len(p.matches) == 0 {
+			// No matching commands: hide the palette entirely.
+			p.active = false
 			p.index = -1
 		} else if p.index < 0 || p.index >= len(p.matches) {
 			p.index = 0
@@ -164,7 +166,7 @@ func (p *Palette) Height() int {
 	}
 	n := len(p.matches)
 	if n == 0 {
-		return 1 // minimum (empty tip + border)
+		return 0 // minimum (empty tip + border)
 	}
 	if n > maxPaletteRows {
 		n = maxPaletteRows
@@ -177,11 +179,7 @@ func (p *Palette) Height() int {
 func (p *Palette) Render() string {
 	paletteWidth := p.width
 	if len(p.matches) == 0 {
-		msg := "无匹配命令"
-		if p.filter == "" {
-			msg = "输入命令名称进行搜索..."
-		}
-		return dimStyle.Width(paletteWidth).Render(msg)
+		return ""
 	}
 
 	lines := make([]string, 0, len(p.matches))
