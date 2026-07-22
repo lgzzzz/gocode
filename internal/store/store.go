@@ -69,7 +69,6 @@ func (s *Store) migrate() error {
 		id           INTEGER PRIMARY KEY AUTOINCREMENT,
 		session_id   TEXT NOT NULL,
 		seq          INTEGER NOT NULL,
-		role         TEXT NOT NULL,
 		msg_type     TEXT NOT NULL,
 		content      TEXT NOT NULL DEFAULT '',
 		tool_name    TEXT DEFAULT NULL,

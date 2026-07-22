@@ -14,12 +14,11 @@ func (c *NewCommand) Execute(ctx context.Context, args string, env *Env) (*Resul
 	if env.Model.Running() {
 		env.Model.CancelAgent()
 	}
-
 	// Clear agent conversation history
 	env.Agent.ClearHistory()
 
-	// Clear TUI message history
-	env.Model.ClearHistory()
+	// Create a new session in the store and clear TUI message history
+	env.Model.NewSession()
 
 	return &Result{Message: "✨ 已开启新对话，上下文已清除。"}, nil
 }

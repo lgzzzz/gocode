@@ -24,8 +24,7 @@ type SessionInfo struct {
 type Message struct {
 	SessionID  string
 	Seq        int    // assigned automatically by AppendMessage
-	Role       string // "user" | "assistant" | "system" | "tool"
-	MsgType    string // see msg_type enum in docs
+	MsgType    string // "user" | "assistant" | "thinking" | "tool_call" | "tool_result"
 	Content    string
 	ToolName   string // only for tool_call
 	ToolArgs   string // only for tool_call
@@ -36,9 +35,14 @@ type Message struct {
 
 // ---- session operations ----
 
+// NewSessionID returns a new random UUID string for use as a session ID.
+func NewSessionID() string {
+	return uuid.New().String()
+}
+
 // CreateSession inserts a new session and returns its UUID.
 func (s *Store) CreateSession(model, cwd string) (string, error) {
-	id := uuid.New().String()
+	id := NewSessionID()
 	now := nowUTC()
 	_, err := s.db.Exec(
 		`INSERT INTO sessions (id, created_at, updated_at, model, cwd)
@@ -49,6 +53,21 @@ func (s *Store) CreateSession(model, cwd string) (string, error) {
 		return "", fmt.Errorf("store: create session: %w", err)
 	}
 	return id, nil
+}
+
+// EnsureSession creates a session row if it does not already exist.
+// Safe to call multiple times – uses INSERT OR IGNORE.
+func (s *Store) EnsureSession(id, model, cwd string) error {
+	now := nowUTC()
+	_, err := s.db.Exec(
+		`INSERT OR IGNORE INTO sessions (id, created_at, updated_at, model, cwd)
+		 VALUES (?, ?, ?, ?, ?)`,
+		id, now, now, model, cwd,
+	)
+	if err != nil {
+		return fmt.Errorf("store: ensure session: %w", err)
+	}
+	return nil
 }
 
 // UpdateSessionTime updates the updated_at field for the given session.
@@ -115,10 +134,10 @@ func (s *Store) AppendMessage(msg Message) error {
 
 	// 2. Insert message.
 	_, err = tx.Exec(
-		`INSERT INTO messages (session_id, seq, role, msg_type, content,
+		`INSERT INTO messages (session_id, seq, msg_type, content,
 			tool_name, tool_args, tool_call_id, has_error, created_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		msg.SessionID, seq, msg.Role, msg.MsgType, msg.Content,
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		msg.SessionID, seq, msg.MsgType, msg.Content,
 		msg.ToolName, msg.ToolArgs, msg.ToolCallID,
 		boolToInt(msg.HasError), now,
 	)

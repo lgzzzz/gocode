@@ -35,6 +35,7 @@ type ModelAccess interface {
 	Running() bool
 	CancelAgent()
 	ClearHistory()
+	NewSession() // creates a new session in store and clears TUI history
 	AppendSystemMessage(content string)
 	ListSessions() string // returns formatted list of recent sessions
 }

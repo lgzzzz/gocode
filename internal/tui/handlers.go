@@ -83,12 +83,12 @@ func (m *model) handleKeyPress(msg tea.KeyPressMsg) []tea.Cmd {
 			m.editor.Reset()
 			m.history.Append(compoent.NewUserMessage(input))
 
-			// Persist user message.
+			// Persist user message (lazily creates session row on first message).
 			if m.store != nil {
+				m.store.EnsureSession(m.sessionID, m.agent.Model(), m.cwd)
 				m.store.AppendMessage(store.Message{
 					SessionID: m.sessionID,
-					Role:      "user",
-					MsgType:   "user_message",
+					MsgType:   "user",
 					Content:   input,
 				})
 			}
@@ -153,60 +153,33 @@ func (m *model) persistMessage(msg progressMsg) {
 	}
 
 	sm := store.Message{
-		SessionID: m.sessionID,
-		ToolName:  msg.toolName,
-		ToolArgs:  msg.toolArgs,
+		SessionID:  m.sessionID,
+		ToolCallID: msg.id,
+		ToolName:   msg.toolName,
+		ToolArgs:   msg.toolArgs,
 	}
 
 	switch msg.typ {
-
-	// ---- streaming messages: not persisted ----
-	case agent.MsgThinkingStream, agent.MsgAssistantStream:
-		return
-
 	// ---- complete thinking ----
 	case agent.MsgThinking:
-		sm.Role = "assistant"
 		sm.MsgType = "thinking"
 		sm.Content = msg.content
 
 	// ---- complete assistant reply ----
 	case agent.MsgAssistant:
-		sm.Role = "assistant"
 		sm.MsgType = "assistant"
 		sm.Content = msg.content
 
 	// ---- tool call ----
 	case agent.MsgToolCall:
-		sm.Role = "assistant"
 		sm.MsgType = "tool_call"
-		sm.ToolCallID = msg.id
-		sm.ToolName = msg.toolName
-		sm.ToolArgs = msg.toolArgs
 		sm.Content = msg.content
 
 	// ---- tool result ----
 	case agent.MsgToolResult:
-		sm.Role = "tool"
 		sm.MsgType = "tool_result"
-		sm.ToolCallID = msg.id
-		sm.ToolName = msg.toolName
 		sm.Content = msg.content
 		sm.HasError = msg.toolErr != nil
-
-	// ---- error ----
-	case agent.MsgError:
-		sm.Role = "system"
-		sm.MsgType = "error"
-		sm.Content = msg.content
-		sm.HasError = true
-
-	// ---- retry wait ----
-	case agent.MsgRetryWait:
-		sm.Role = "system"
-		sm.MsgType = "retry_wait"
-		sm.Content = msg.content
-
 	default:
 		return
 	}

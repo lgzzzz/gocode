@@ -37,6 +37,7 @@ type model struct {
 
 	store     *store.Store // session persistence (nil if unavailable)
 	sessionID string       // current session UUID
+	cwd       string       // current working directory when session was created
 }
 
 // NewModel creates a new TUI model.
@@ -65,12 +66,9 @@ func NewModel(ag *agent.Agent, st *store.Store) tea.Model {
 	reg.Register(&command.NewCommand{})
 	reg.Register(&command.SessionsCommand{})
 
-	// Create a new session in the store.
-	var sessionID string
-	if st != nil {
-		cwd, _ := os.Getwd()
-		sessionID, _ = st.CreateSession(ag.Model(), cwd)
-	}
+	// Generate a session ID (DB row is created lazily on first message).
+	cwd, _ := os.Getwd()
+	sessionID := store.NewSessionID()
 
 	m := model{
 		editor:    ta,
@@ -81,6 +79,7 @@ func NewModel(ag *agent.Agent, st *store.Store) tea.Model {
 		palette:   palette.New(reg),
 		store:     st,
 		sessionID: sessionID,
+		cwd:       cwd,
 	}
 	m.adjustLayout()
 	return m

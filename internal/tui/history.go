@@ -2,9 +2,11 @@ package tui
 
 import (
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
+	"github.com/lgzzzz/gocode/internal/store"
 	"github.com/lgzzzz/gocode/internal/tui/compoent"
 )
 
@@ -12,6 +14,14 @@ import (
 
 // ClearHistory clears the TUI message history.
 func (m *model) ClearHistory() { m.history.Clear() }
+
+// NewSession swaps to a new session ID and clears TUI history.
+// The actual DB session row is created lazily when the first message is sent.
+func (m *model) NewSession() {
+	m.history.Clear()
+	m.sessionID = store.NewSessionID()
+	m.cwd, _ = os.Getwd()
+}
 
 // AppendSystemMessage appends a system message to the chat history.
 func (m *model) AppendSystemMessage(content string) {
