@@ -15,6 +15,53 @@ func (m *model) handleKeyPress(msg tea.KeyPressMsg) []tea.Cmd {
 
 	k := msg.Key()
 
+	// ---- command mode: intercept special keys ----
+	if m.commandMode {
+		switch msg.String() {
+		case "esc":
+			m.editor.Reset()
+			m.commandMode = false
+			m.commandIndex = 0
+			m.commandMatches = nil
+			return nil
+
+		case "enter":
+			if len(m.commandMatches) > 0 && m.commandIndex >= 0 {
+				cmd := m.commandMatches[m.commandIndex]
+				return []tea.Cmd{m.executeCommand(cmd)}
+			}
+			return nil
+
+		case "up":
+			if m.commandIndex > 0 {
+				m.commandIndex--
+			}
+			// Still update editor so textarea processes the key (even though
+			// we consume it for navigation). Actually, don't forward to editor.
+			return nil
+
+		case "down":
+			if m.commandIndex < len(m.commandMatches)-1 {
+				m.commandIndex++
+			}
+			return nil
+
+		case "tab":
+			// Tab auto-completes the command name into the editor
+			if len(m.commandMatches) > 0 && m.commandIndex >= 0 {
+				m.editor.SetValue("/" + m.commandMatches[m.commandIndex].Name() + " ")
+				// Move cursor to end
+				m.editor.CursorEnd()
+				m.updateCommandMode()
+			}
+			return nil
+		}
+
+		// For other keys (letters, backspace, etc.), fall through and let the
+		// editor process them normally. After the editor updates we will call
+		// updateCommandMode() to refresh the filter.
+	}
+
 	// Always forward to editor (except for special keys that we handle first).
 	switch {
 	case k.Code == tea.KeyUp || k.Code == tea.KeyDown:
@@ -22,6 +69,9 @@ func (m *model) handleKeyPress(msg tea.KeyPressMsg) []tea.Cmd {
 	default:
 		cmds = append(cmds, m.updateEditor(msg)...)
 	}
+
+	// After editor update, refresh command mode state
+	m.updateCommandMode()
 
 	// Special key bindings (quit, submit, etc.)
 	switch msg.String() {

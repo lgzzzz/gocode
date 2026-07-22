@@ -13,6 +13,8 @@ import (
 	"github.com/charmbracelet/x/term"
 
 	"github.com/lgzzzz/gocode/internal/agent"
+	"github.com/lgzzzz/gocode/internal/command"
+	"github.com/lgzzzz/gocode/internal/tui/compoent"
 )
 
 // ---- model ----
@@ -29,6 +31,13 @@ type model struct {
 	ch      chan progressMsg
 
 	lastContent string // track content to detect when it changes (for auto-scroll)
+
+	// ---- command palette state ----
+	commandMode     bool               // whether the command palette is visible
+	commandFilter   string             // current filter text (text after "/")
+	commandIndex    int                // currently highlighted command index
+	commandMatches  []command.Executor // filtered list of matching commands
+	commandRegistry *command.Registry  // command registry
 }
 
 // NewModel creates a new TUI model.
@@ -54,12 +63,17 @@ func NewModel(ag *agent.Agent) tea.Model {
 
 	ta.Focus() // 初始获得焦点
 
+	// Initialize command registry and register built-in commands.
+	reg := command.NewRegistry()
+	reg.Register(&command.NewCommand{})
+
 	m := model{
-		editor: ta,
-		output: viewport.New(),
-		agent:  ag,
-		width:  width,
-		height: height,
+		editor:          ta,
+		output:          viewport.New(),
+		agent:           ag,
+		width:           width,
+		height:          height,
+		commandRegistry: reg,
 	}
 	m.adjustLayout()
 	return m
@@ -105,7 +119,14 @@ func (m model) View() tea.View {
 	if m.running {
 		editorArea = inputBarDimStyle.Render("⏳ Processing... (Esc to stop)")
 	} else {
-		editorArea = m.editor.View()
+		if m.commandMode {
+			editorArea = lipgloss.JoinVertical(lipgloss.Left,
+				m.renderCommandPalette(),
+				m.editor.View(),
+			)
+		} else {
+			editorArea = m.editor.View()
+		}
 	}
 
 	// Place the editor below the output area.
@@ -118,10 +139,14 @@ func (m model) View() tea.View {
 
 	// Set real cursor position for the editor.
 	// The editor cursor is relative to its own top-left; offset it by the
-	// output height + 1 blank line to match its position in the full view.
+	// output height + 1 blank line + palette height to match its position in
+	// the full view.
 	if !m.running {
 		if c := m.editor.Cursor(); c != nil {
 			c.Position.Y += m.output.Height() + 1
+			if m.commandMode {
+				c.Position.Y += lipgloss.Height(m.renderCommandPalette())
+			}
 			v.Cursor = c
 		}
 	}
@@ -129,8 +154,34 @@ func (m model) View() tea.View {
 	return v
 }
 
+// ---- ModelAccess interface implementation ----
+
+// Running returns whether the agent is currently executing.
+func (m *model) Running() bool { return m.running }
+
+// CancelAgent cancels the running agent context.
+func (m *model) CancelAgent() { m.cancelAgent() }
+
+// ClearHistory clears the TUI message history.
+func (m *model) ClearHistory() { m.history.Clear() }
+
+// AppendSystemMessage appends a system message to the chat history.
+func (m *model) AppendSystemMessage(content string) {
+	m.history.Append(compoent.NewSystemMessage(content))
+}
+
 func (m *model) adjustLayout() {
 	m.editor.SetWidth(m.width - 2)
 	m.output.SetWidth(m.width - 2)
-	m.output.SetHeight(max(0, m.height-m.editor.Height()-1))
+
+	paletteHeight := 0
+	if m.commandMode {
+		paletteHeight = min(len(m.commandMatches), 8) + 2 // content + border
+		if paletteHeight < 3 {
+			paletteHeight = 3 // minimum height (empty tip + border)
+		}
+	}
+	editorHeight := m.editor.Height()
+	totalBottom := editorHeight + paletteHeight + 1 // +1 for spacing
+	m.output.SetHeight(max(0, m.height-totalBottom))
 }

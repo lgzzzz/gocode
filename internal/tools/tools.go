@@ -206,9 +206,9 @@ func AllTools() (map[string]ToolExecutor, []ToolDef) {
 	}
 	defs := []ToolDef{
 		{
-			Name:            "read",
-			Description:     "Read contents of a text file. Returns file content as text.",
-			PromptSnippet:   "Read file contents",
+			Name:             "read",
+			Description:      "Read contents of a text file. Returns file content as text.",
+			PromptSnippet:    "Read file contents",
 			PromptGuidelines: []string{"Use read to examine files instead of cat or sed."},
 			Parameters: map[string]any{
 				"type": "object",
@@ -221,9 +221,9 @@ func AllTools() (map[string]ToolExecutor, []ToolDef) {
 			},
 		},
 		{
-			Name:            "write",
-			Description:     "Create or overwrite a file with the given content. Creates parent directories as needed.",
-			PromptSnippet:   "Create or overwrite files",
+			Name:             "write",
+			Description:      "Create or overwrite a file with the given content. Creates parent directories as needed.",
+			PromptSnippet:    "Create or overwrite files",
 			PromptGuidelines: []string{"Use write only for new files or complete rewrites"},
 			Parameters: map[string]any{
 				"type": "object",
@@ -235,9 +235,9 @@ func AllTools() (map[string]ToolExecutor, []ToolDef) {
 			},
 		},
 		{
-			Name:            "edit",
-			Description:     "Edit a file by replacing an exact text match with new text. oldText must be unique in the file.",
-			PromptSnippet:   "Make precise text replacements in files",
+			Name:          "edit",
+			Description:   "Edit a file by replacing an exact text match with new text. oldText must be unique in the file.",
+			PromptSnippet: "Make precise text replacements in files",
 			PromptGuidelines: []string{
 				"Use edit for precise, small changes; use write only for new files or complete rewrites",
 				"When edit fails because oldText is not unique, read the file around the target area and try again with more context",
@@ -253,9 +253,9 @@ func AllTools() (map[string]ToolExecutor, []ToolDef) {
 			},
 		},
 		{
-			Name:            "bash",
-			Description:     "Execute a bash command in the current working directory. Returns stdout and stderr combined.",
-			PromptSnippet:   "Execute bash commands (ls, grep, find, etc.)",
+			Name:             "bash",
+			Description:      "Execute a bash command in the current working directory. Returns stdout and stderr combined.",
+			PromptSnippet:    "Execute bash commands (ls, grep, find, etc.)",
 			PromptGuidelines: []string{"Use bash for commands like ls, grep, find, go build, go test, git, etc."},
 			Parameters: map[string]any{
 				"type": "object",

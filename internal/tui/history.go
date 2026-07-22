@@ -55,6 +55,12 @@ func (h *History) UpdateToolResult(id, result string, hasErr bool) bool {
 	return false
 }
 
+// Clear removes all items from the history and marks it dirty.
+func (h *History) Clear() {
+	h.items = nil
+	h.dirty = true
+}
+
 // MarkDirty forces the history to be considered stale (e.g. after a
 // terminal resize that changes the available width).
 func (h *History) MarkDirty() {
