@@ -3,6 +3,7 @@
 package sessionbrowser
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -14,6 +15,15 @@ import (
 
 	"github.com/lgzzzz/gocode/internal/store"
 )
+
+// ---- SessionStore ----
+
+// SessionStore is the storage abstraction required by Browser.
+// The concrete store.Store satisfies this interface automatically.
+type SessionStore interface {
+	ListSessions(limit int) ([]store.SessionInfo, error)
+	GetSessionMessages(sessionID string) ([]store.Message, error)
+}
 
 // ---- sessionItem ----
 
@@ -106,16 +116,20 @@ func (d sessionDelegate) Update(msg tea.Msg, m *list.Model) tea.Cmd {
 // ---- Browser ----
 
 // Browser wraps a list.Model to provide interactive session selection.
+// It queries sessions from the injected SessionStore on activation.
 type Browser struct {
 	list   list.Model
+	store  SessionStore
 	active bool
 }
 
-// New creates a new session browser component.
-func New(width, height int) *Browser {
+// New creates a new session browser component. The store may be nil
+// if persistence is unavailable — in that case Reload will return
+// an error. Does not load data; call Reload or SetSessions to
+// populate the list.
+func New(width, height int, store SessionStore) *Browser {
 	delegate := sessionDelegate{}
 
-	// Pre-create an empty list; items are set later via SetSessions.
 	l := list.New(nil, delegate, width, height)
 	l.Title = "Sessions"
 	l.SetShowTitle(false)
@@ -139,8 +153,10 @@ func New(width, height int) *Browser {
 	}
 	l.Paginator.PerPage = perPage
 
-	return &Browser{list: l, active: true}
+	return &Browser{list: l, store: store}
 }
+
+// ---- state ----
 
 // SetActive sets the active state of the browser.
 func (b *Browser) SetActive(active bool) {
@@ -150,6 +166,27 @@ func (b *Browser) SetActive(active bool) {
 // Active returns whether the browser is currently active.
 func (b *Browser) Active() bool {
 	return b.active
+}
+
+// IsEmpty reports whether the session list is empty.
+func (b *Browser) IsEmpty() bool {
+	return len(b.list.Items()) == 0
+}
+
+// ---- data ----
+
+// Reload re-queries sessions from the store and refreshes the list.
+// Returns an error if the store is nil or the query fails.
+func (b *Browser) Reload() error {
+	if b.store == nil {
+		return errors.New("session store is unavailable")
+	}
+	sessions, err := b.store.ListSessions(50)
+	if err != nil {
+		return err
+	}
+	b.SetSessions(sessions)
+	return nil
 }
 
 // SetSessions populates the browser with the given sessions.
@@ -174,6 +211,13 @@ func (b *Browser) Selected() *store.SessionInfo {
 	s := si.Session
 	return &s
 }
+
+// GetMessages returns all persisted messages for the given session.
+func (b *Browser) GetMessages(sessionID string) ([]store.Message, error) {
+	return b.store.GetSessionMessages(sessionID)
+}
+
+// ---- bubbletea.Model ----
 
 // Update delegates to the underlying list model.
 func (b *Browser) Update(msg tea.Msg) (tea.Model, tea.Cmd) {

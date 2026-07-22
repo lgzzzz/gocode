@@ -9,7 +9,6 @@ import (
 	"github.com/lgzzzz/gocode/internal/agent"
 	"github.com/lgzzzz/gocode/internal/store"
 	"github.com/lgzzzz/gocode/internal/tui/compoent"
-	"github.com/lgzzzz/gocode/internal/tui/sessionbrowser"
 )
 
 // ---- ModelAccess interface implementation ----
@@ -61,21 +60,16 @@ func (m *model) ListSessions() string {
 // EnterSessionBrowser loads sessions from the store and activates
 // the interactive session browser, replacing the output viewport.
 func (m *model) EnterSessionBrowser() {
-	if m.store == nil {
-		m.history.Append(compoent.NewSystemMessage("📭 会话存储不可用"))
-		return
-	}
-	sessions, err := m.store.ListSessions(50)
-	if err != nil {
+	m.sessionBrowser.SetSize(m.width, m.output.Height())
+	if err := m.sessionBrowser.Reload(); err != nil {
 		m.history.Append(compoent.NewErrorMessage(err.Error()))
 		return
 	}
-	if len(sessions) == 0 {
+	if m.sessionBrowser.IsEmpty() {
 		m.history.Append(compoent.NewSystemMessage("📭 暂无历史会话"))
 		return
 	}
-	m.sessionBrowser = sessionbrowser.New(m.width, m.output.Height())
-	m.sessionBrowser.SetSessions(sessions)
+	m.sessionBrowser.SetActive(true)
 }
 
 // ExitSessionBrowser deactivates the session browser and restores
@@ -87,11 +81,7 @@ func (m *model) ExitSessionBrowser() {
 // LoadSession loads all messages from the given session and rebuilds
 // both the TUI history and the agent's conversation history.
 func (m *model) LoadSession(sessionID string) {
-	if m.store == nil {
-		return
-	}
-
-	msgs, err := m.store.GetSessionMessages(sessionID)
+	msgs, err := m.sessionBrowser.GetMessages(sessionID)
 	if err != nil {
 		m.history.Append(compoent.NewErrorMessage(err.Error()))
 		return

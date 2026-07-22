@@ -73,15 +73,16 @@ func NewModel(ag *agent.Agent, st *store.Store) tea.Model {
 	sessionID := store.NewSessionID()
 
 	m := model{
-		editor:    ta,
-		output:    viewport.New(),
-		agent:     ag,
-		width:     width,
-		height:    height,
-		palette:   palette.New(reg),
-		store:     st,
-		sessionID: sessionID,
-		cwd:       cwd,
+		editor:         ta,
+		output:         viewport.New(),
+		agent:          ag,
+		width:          width,
+		height:         height,
+		palette:        palette.New(reg),
+		store:          st,
+		sessionID:      sessionID,
+		cwd:            cwd,
+		sessionBrowser: sessionbrowser.New(width, height, st),
 	}
 	m.adjustLayout()
 	return m
