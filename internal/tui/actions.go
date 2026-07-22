@@ -1,0 +1,72 @@
+package tui
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"strings"
+
+	tea "charm.land/bubbletea/v2"
+
+	"github.com/lgzzzz/gocode/internal/agent"
+	"github.com/lgzzzz/gocode/internal/tui/compoent"
+)
+
+// ---- agent actions ----
+
+// submitTask sends the current input to the agent for processing.
+func (m *model) submitTask() tea.Cmd {
+	input := strings.TrimSpace(m.input.Value())
+	if input == "" {
+		return nil
+	}
+	m.input.Reset()
+	m.log = append(m.log,
+		compoent.UserMessage{Content: input},
+	)
+	m.dirty = true
+	m.running = true
+
+	ctx, cancel := context.WithCancel(context.Background())
+	m.cancel = cancel
+
+	ch := make(chan progressMsg, 64)
+	m.ch = ch
+
+	go func(ag *agent.Agent, input string) {
+		defer func() {
+			if r := recover(); r != nil {
+				ch <- progressMsg{err: fmt.Errorf("panic: %v", r)}
+				ch <- progressMsg{done: true}
+				close(ch)
+			}
+		}()
+		_, err := ag.Run(ctx, input, func(msg agent.CallbackMsg) {
+			ch <- progressMsg{
+				typ:      msg.Type,
+				id:       msg.ID,
+				content:  msg.Content,
+				toolName: msg.ToolName,
+				toolArgs: msg.ToolArgs,
+				toolErr:  msg.Err,
+			}
+		})
+		if err != nil && !errors.Is(err, context.Canceled) {
+			ch <- progressMsg{err: err}
+		}
+		ch <- progressMsg{done: true}
+		close(ch)
+	}(m.agent, input)
+
+	return waitCmd(ch)
+}
+
+// cancelAgent cancels the running agent context, stopping the ReAct loop.
+func (m *model) cancelAgent() {
+	if m.cancel != nil {
+		m.cancel()
+		m.cancel = nil
+	}
+	// The goroutine will receive context.Canceled, send the error + done
+	// messages, and handleProgressMsg will transition out of running state.
+}
