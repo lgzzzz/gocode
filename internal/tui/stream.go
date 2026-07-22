@@ -12,12 +12,7 @@ func (m *model) applyStreamUpdate(msg progressMsg) {
 	kind := componentTypeStr(msg.typ)
 	for i := len(m.log) - 1; i >= 0; i-- {
 		if m.log[i].MsgID() == msg.id && m.log[i].Type() == kind {
-			switch c := m.log[i].(type) {
-			case *compoent.AssistantMessage:
-				c.Content = msg.content
-			case *compoent.ThinkingMessage:
-				c.Content = msg.content
-			}
+			m.log[i].SetContent(msg.content)
 			m.dirty = true
 			return
 		}
@@ -25,9 +20,9 @@ func (m *model) applyStreamUpdate(msg progressMsg) {
 	// Not found — append new streaming component.
 	switch kind {
 	case "assistant":
-		m.log = append(m.log, &compoent.AssistantMessage{ID: msg.id, Content: msg.content})
+		m.log = append(m.log, compoent.NewAssistantMessage(msg.id, msg.content))
 	case "thinking":
-		m.log = append(m.log, &compoent.ThinkingMessage{ID: msg.id, Content: msg.content})
+		m.log = append(m.log, compoent.NewThinkingMessage(msg.id, msg.content))
 	}
 	m.dirty = true
 }

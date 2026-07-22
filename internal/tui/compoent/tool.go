@@ -19,19 +19,22 @@ const (
 // Use NewToolMessage to create one in "executing" state, then call
 // SetResult when the tool result arrives to transition to success/error.
 type ToolMessage struct {
-	ID     string
-	Name   string
-	Args   string
-	Result string
-	State  ToolState
+	id          string
+	name        string
+	args        string
+	result      string
+	state       ToolState
+	renderCache string
+	renderWidth int
+	dirty       bool
 }
 
 func NewToolMessage(id, name, args string) *ToolMessage {
 	return &ToolMessage{
-		ID:    id,
-		Name:  name,
-		Args:  args,
-		State: ToolStateExecuting,
+		id:    id,
+		name:  name,
+		args:  args,
+		dirty: true,
 	}
 }
 
@@ -39,34 +42,68 @@ func NewToolMessage(id, name, args string) *ToolMessage {
 // It falls back to pattern-matching on the result string to detect errors,
 // but callers should prefer using SetError() via CallbackMsg.Err for accuracy.
 func (m *ToolMessage) SetResult(result string) {
-	m.Result = result
+	if m.result == result && m.state != ToolStateExecuting {
+		return
+	}
+	m.result = result
 	if strings.HasPrefix(result, "Error:") ||
 		strings.HasPrefix(result, "exit ") ||
 		strings.HasPrefix(result, "(timed out") {
-		m.State = ToolStateError
+		m.state = ToolStateError
 	} else {
-		m.State = ToolStateSuccess
+		m.state = ToolStateSuccess
 	}
+	m.invalidateCache()
 }
 
 // SetError explicitly marks the tool as having errored.
 // Call this after SetResult when CallbackMsg.Err is non-nil.
 func (m *ToolMessage) SetError() {
-	m.State = ToolStateError
+	if m.state == ToolStateError {
+		return
+	}
+	m.state = ToolStateError
+	m.invalidateCache()
 }
 
 func (m *ToolMessage) Type() string  { return "tool" }
-func (m *ToolMessage) MsgID() string { return m.ID }
+func (m *ToolMessage) MsgID() string { return m.id }
+
+func (m *ToolMessage) SetContent(content string) {
+	if m.result == content {
+		return
+	}
+	m.result = content
+	m.invalidateCache()
+}
+
+func (m *ToolMessage) invalidateCache() {
+	if m.renderWidth > 0 {
+		m.renderCache = m.renderLocked(m.renderWidth)
+	} else {
+		m.dirty = true
+	}
+}
+
+func (m *ToolMessage) Render(width int) string {
+	if !m.dirty && width == m.renderWidth {
+		return m.renderCache
+	}
+	m.renderWidth = width
+	m.renderCache = m.renderLocked(width)
+	m.dirty = false
+	return m.renderCache
+}
 
 const maxToolResultLines = 6
 
-func (m *ToolMessage) Render(width int) string {
-	argsPreview := truncateStr(m.Args, 150)
-	content := m.Name + "(" + argsPreview + ")"
+// renderLocked builds the rendered string for the given width.
+func (m *ToolMessage) renderLocked(width int) string {
+	argsPreview := truncateStr(m.args, 150)
+	content := m.name + "(" + argsPreview + ")"
 
-	if m.State != ToolStateExecuting && m.Result != "" {
-		// Truncate result to avoid taking too much vertical space
-		lines := strings.Split(m.Result, "\n")
+	if m.state != ToolStateExecuting && m.result != "" {
+		lines := strings.Split(m.result, "\n")
 		if len(lines) > maxToolResultLines {
 			skipped := len(lines) - maxToolResultLines
 			lines = append(lines[:maxToolResultLines],
@@ -76,7 +113,7 @@ func (m *ToolMessage) Render(width int) string {
 	}
 
 	style := toolStyle
-	if m.State == ToolStateError {
+	if m.state == ToolStateError {
 		style = toolErrorStyle
 	}
 	return strings.TrimSpace(style.Width(width - 1).Render(strings.TrimSpace(content)))

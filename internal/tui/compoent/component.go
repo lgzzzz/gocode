@@ -15,4 +15,6 @@ type Component interface {
 	MsgID() string
 	// Render returns the component rendered as a string for the given terminal width.
 	Render(width int) string
+	// SetContent updates the component's content in place.
+	SetContent(content string)
 }

@@ -2,13 +2,41 @@ package compoent
 
 // ThinkingMessage renders an assistant's reasoning/thinking block.
 type ThinkingMessage struct {
-	ID      string
-	Content string
+	id          string
+	content     string
+	renderCache string
+	renderWidth int
+	dirty       bool
 }
 
-func (m ThinkingMessage) Type() string  { return "thinking" }
-func (m ThinkingMessage) MsgID() string { return m.ID }
+// NewThinkingMessage creates a new thinking message component.
+func NewThinkingMessage(id, content string) *ThinkingMessage {
+	m := &ThinkingMessage{id: id}
+	m.SetContent(content)
+	return m
+}
 
-func (m ThinkingMessage) Render(width int) string {
-	return renderTrim(thinkingStyle, width-1, m.Content)
+func (m *ThinkingMessage) Type() string  { return "thinking" }
+func (m *ThinkingMessage) MsgID() string { return m.id }
+
+func (m *ThinkingMessage) SetContent(content string) {
+	if m.content == content {
+		return
+	}
+	m.content = content
+	if m.renderWidth > 0 {
+		m.renderCache = renderTrim(thinkingStyle, m.renderWidth-1, content)
+	} else {
+		m.dirty = true
+	}
+}
+
+func (m *ThinkingMessage) Render(width int) string {
+	if !m.dirty && width == m.renderWidth {
+		return m.renderCache
+	}
+	m.renderWidth = width
+	m.renderCache = renderTrim(thinkingStyle, width-1, m.content)
+	m.dirty = false
+	return m.renderCache
 }

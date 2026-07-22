@@ -61,7 +61,7 @@ func (m *model) handleWindowSizeMsg(msg tea.WindowSizeMsg) []tea.Cmd {
 func (m *model) handleProgressMsg(msg progressMsg) []tea.Cmd {
 	if msg.err != nil {
 		m.log = append(m.log,
-			compoent.ErrorMessage{Content: msg.err.Error()},
+			compoent.NewErrorMessage(msg.err.Error()),
 		)
 		m.dirty = true
 		return nil
@@ -87,7 +87,7 @@ func (m *model) handleProgressMsg(msg progressMsg) []tea.Cmd {
 		m.dirty = true
 
 	default:
-		m.log = append(m.log, &compoent.AssistantMessage{ID: msg.id, Content: msg.content})
+		m.log = append(m.log, compoent.NewAssistantMessage(msg.id, msg.content))
 		m.dirty = true
 	}
 

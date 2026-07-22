@@ -1,8 +1,6 @@
 package tui
 
 import (
-	"strings"
-
 	tea "charm.land/bubbletea/v2"
 )
 
@@ -31,12 +29,6 @@ func (m *model) updateViewportModel(msg tea.Msg) []tea.Cmd {
 	return nil
 }
 
-func (m *model) adjustLayout() {
-	m.input.SetWidth(m.width - 2)
-	m.viewport.SetWidth(m.width - 2)
-	m.viewport.SetHeight(max(0, m.height-m.input.Height()-1))
-}
-
 func (m *model) updateViewport() {
 	// Skip expensive re-render if nothing changed (e.g. during rapid typing/deletion).
 	if !m.dirty {
@@ -46,20 +38,17 @@ func (m *model) updateViewport() {
 
 	atBottom := m.viewport.AtBottom()
 	var parts []string
-	for _, comp := range m.log {
+	for i, comp := range m.log {
 		rendered := comp.Render(m.viewport.Width())
 		if rendered != "" {
 			parts = append(parts, rendered)
-			parts = append(parts, "") // spacing between cards
+			if i != len(m.log)-1 {
+				parts = append(parts, "") // spacing between cards
+			}
 		}
 	}
-	content := strings.TrimSpace(strings.Join(parts, "\n"))
-	m.viewport.SetContent(content)
-
-	if content != m.lastContent {
-		if atBottom {
-			m.viewport.GotoBottom()
-		}
-		m.lastContent = content
+	m.viewport.SetContentLines(parts)
+	if atBottom {
+		m.viewport.GotoBottom()
 	}
 }

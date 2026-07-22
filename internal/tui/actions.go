@@ -22,7 +22,7 @@ func (m *model) submitTask() tea.Cmd {
 	}
 	m.input.Reset()
 	m.log = append(m.log,
-		compoent.UserMessage{Content: input},
+		compoent.NewUserMessage(input),
 	)
 	m.dirty = true
 	m.running = true

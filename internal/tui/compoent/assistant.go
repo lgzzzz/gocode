@@ -2,13 +2,41 @@ package compoent
 
 // AssistantMessage renders an assistant chat message.
 type AssistantMessage struct {
-	ID      string
-	Content string
+	id          string
+	content     string
+	renderCache string
+	renderWidth int
+	dirty       bool
 }
 
-func (m AssistantMessage) Type() string  { return "assistant" }
-func (m AssistantMessage) MsgID() string { return m.ID }
+// NewAssistantMessage creates a new assistant message component.
+func NewAssistantMessage(id, content string) *AssistantMessage {
+	m := &AssistantMessage{id: id}
+	m.SetContent(content)
+	return m
+}
 
-func (m AssistantMessage) Render(width int) string {
-	return renderTrim(assistantStyle, width-1, m.Content)
+func (m *AssistantMessage) Type() string  { return "assistant" }
+func (m *AssistantMessage) MsgID() string { return m.id }
+
+func (m *AssistantMessage) SetContent(content string) {
+	if m.content == content {
+		return
+	}
+	m.content = content
+	if m.renderWidth > 0 {
+		m.renderCache = renderTrim(assistantStyle, m.renderWidth-1, content)
+	} else {
+		m.dirty = true
+	}
+}
+
+func (m *AssistantMessage) Render(width int) string {
+	if !m.dirty && width == m.renderWidth {
+		return m.renderCache
+	}
+	m.renderWidth = width
+	m.renderCache = renderTrim(assistantStyle, width-1, m.content)
+	m.dirty = false
+	return m.renderCache
 }

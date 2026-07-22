@@ -130,3 +130,9 @@ func (m model) View() tea.View {
 
 	return v
 }
+
+func (m *model) adjustLayout() {
+	m.input.SetWidth(m.width - 2)
+	m.viewport.SetWidth(m.width - 2)
+	m.viewport.SetHeight(max(0, m.height-m.input.Height()-1))
+}
