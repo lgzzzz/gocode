@@ -16,50 +16,36 @@ func (m *model) handleKeyPress(msg tea.KeyPressMsg) []tea.Cmd {
 	k := msg.Key()
 
 	// ---- command mode: intercept special keys ----
-	if m.commandMode {
-		switch msg.String() {
-		case "esc":
+	if m.palette.Active() {
+		result := m.palette.HandleKey(msg.String())
+
+		if result.Dismiss {
 			m.editor.Reset()
-			m.commandMode = false
-			m.commandIndex = 0
-			m.commandMatches = nil
 			return nil
+		}
 
-		case "enter":
-			if len(m.commandMatches) > 0 && m.commandIndex >= 0 {
-				cmd := m.commandMatches[m.commandIndex]
-				return []tea.Cmd{m.executeCommand(cmd)}
-			}
+		if result.Execute != nil {
+			args := m.palette.Args(result.Execute.Name())
+			m.palette.Dismiss()
+			m.editor.Reset()
+			return []tea.Cmd{m.executeCommand(result.Execute, args)}
+		}
+
+		if result.CompleteText != "" {
+			m.editor.SetValue(result.CompleteText)
+			m.editor.CursorEnd()
+			m.palette.UpdateFilter(m.editor.Value())
 			return nil
+		}
 
-		case "up":
-			if m.commandIndex > 0 {
-				m.commandIndex--
-			}
-			// Still update editor so textarea processes the key (even though
-			// we consume it for navigation). Actually, don't forward to editor.
-			return nil
-
-		case "down":
-			if m.commandIndex < len(m.commandMatches)-1 {
-				m.commandIndex++
-			}
-			return nil
-
-		case "tab":
-			// Tab auto-completes the command name into the editor
-			if len(m.commandMatches) > 0 && m.commandIndex >= 0 {
-				m.editor.SetValue("/" + m.commandMatches[m.commandIndex].Name() + " ")
-				// Move cursor to end
-				m.editor.CursorEnd()
-				m.updateCommandMode()
-			}
+		// For up/down (already handled inside HandleKey) and unrecognized
+		// keys, don't forward to the editor — navigation keys are consumed.
+		if msg.String() == "up" || msg.String() == "down" {
 			return nil
 		}
 
 		// For other keys (letters, backspace, etc.), fall through and let the
-		// editor process them normally. After the editor updates we will call
-		// updateCommandMode() to refresh the filter.
+		// editor process them normally.
 	}
 
 	// Always forward to editor (except for special keys that we handle first).
@@ -70,8 +56,8 @@ func (m *model) handleKeyPress(msg tea.KeyPressMsg) []tea.Cmd {
 		cmds = append(cmds, m.updateEditor(msg)...)
 	}
 
-	// After editor update, refresh command mode state
-	m.updateCommandMode()
+	// After editor update, refresh command palette state
+	m.palette.UpdateFilter(m.editor.Value())
 
 	// Special key bindings (quit, submit, etc.)
 	switch msg.String() {
@@ -87,7 +73,7 @@ func (m *model) handleKeyPress(msg tea.KeyPressMsg) []tea.Cmd {
 
 	case "enter":
 		if !m.running {
-			cmd := m.submitTask()
+			cmd := m.startAgent()
 			if cmd != nil {
 				cmds = append(cmds, cmd)
 			}
@@ -95,16 +81,6 @@ func (m *model) handleKeyPress(msg tea.KeyPressMsg) []tea.Cmd {
 	}
 
 	return cmds
-}
-
-// handleWindowSizeMsg updates dimensions on terminal resize.
-func (m *model) handleWindowSizeMsg(msg tea.WindowSizeMsg) []tea.Cmd {
-	m.width = msg.Width
-	m.height = msg.Height
-	m.history.MarkDirty() // width changed, need re-render
-	// WindowSizeMsg still needs to reach editor and output so they
-	// can adjust their own internal sizes.
-	return append(m.updateEditor(msg), m.updateOutput(msg)...)
 }
 
 // handleProgressMsg processes agent callback messages (streaming, tool calls, etc.).
@@ -132,7 +108,7 @@ func (m *model) handleProgressMsg(msg progressMsg) []tea.Cmd {
 		m.history.Append(compoent.NewToolMessage(msg.id, msg.toolName, msg.toolArgs))
 
 	case agent.MsgError, agent.MsgRetryWait:
-		// Show error and retry messages in the history
+		// Show  and retry messages in the history
 		m.history.Append(compoent.NewErrorMessage(msg.content))
 
 	default:

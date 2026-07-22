@@ -14,7 +14,8 @@ import (
 
 	"github.com/lgzzzz/gocode/internal/agent"
 	"github.com/lgzzzz/gocode/internal/command"
-	"github.com/lgzzzz/gocode/internal/tui/compoent"
+	"github.com/lgzzzz/gocode/internal/tui/history"
+	"github.com/lgzzzz/gocode/internal/tui/palette"
 )
 
 // ---- model ----
@@ -23,21 +24,15 @@ type model struct {
 	editor  textarea.Model
 	output  viewport.Model
 	agent   *agent.Agent
-	history History
-	width   int
-	height  int
+	history history.History
+	palette *palette.Palette // command palette popup
+
+	width  int
+	height int
+
 	running bool
 	cancel  context.CancelFunc // cancels the running agent context
 	ch      chan progressMsg
-
-	lastContent string // track content to detect when it changes (for auto-scroll)
-
-	// ---- command palette state ----
-	commandMode     bool               // whether the command palette is visible
-	commandFilter   string             // current filter text (text after "/")
-	commandIndex    int                // currently highlighted command index
-	commandMatches  []command.Executor // filtered list of matching commands
-	commandRegistry *command.Registry  // command registry
 }
 
 // NewModel creates a new TUI model.
@@ -55,25 +50,22 @@ func NewModel(ag *agent.Agent) tea.Model {
 	ta.DynamicHeight = true    // 动态高度（自动根据内容调整）
 	ta.MinHeight = 1           // 最小 1 行
 	ta.MaxHeight = 7           // 最大 7 行
-
 	// 设置光标闪烁速度（默认 530ms，这里调快一些）
 	styles := ta.Styles()
 	styles.Cursor.BlinkSpeed = 500 * time.Millisecond
 	ta.SetStyles(styles)
-
 	ta.Focus() // 初始获得焦点
-
-	// Initialize command registry and register built-in commands.
+	// Initialize command registry and palette.
 	reg := command.NewRegistry()
 	reg.Register(&command.NewCommand{})
 
 	m := model{
-		editor:          ta,
-		output:          viewport.New(),
-		agent:           ag,
-		width:           width,
-		height:          height,
-		commandRegistry: reg,
+		editor:  ta,
+		output:  viewport.New(),
+		agent:   ag,
+		width:   width,
+		height:  height,
+		palette: palette.New(reg),
 	}
 	m.adjustLayout()
 	return m
@@ -119,9 +111,9 @@ func (m model) View() tea.View {
 	if m.running {
 		editorArea = inputBarDimStyle.Render("⏳ Processing... (Esc to stop)")
 	} else {
-		if m.commandMode {
+		if m.palette.Active() {
 			editorArea = lipgloss.JoinVertical(lipgloss.Left,
-				m.renderCommandPalette(),
+				m.palette.Render(m.width),
 				m.editor.View(),
 			)
 		} else {
@@ -137,51 +129,15 @@ func (m model) View() tea.View {
 		editorArea,
 	))
 
-	// Set real cursor position for the editor.
-	// The editor cursor is relative to its own top-left; offset it by the
-	// output height + 1 blank line + palette height to match its position in
-	// the full view.
 	if !m.running {
 		if c := m.editor.Cursor(); c != nil {
 			c.Position.Y += m.output.Height() + 1
-			if m.commandMode {
-				c.Position.Y += lipgloss.Height(m.renderCommandPalette())
+			if m.palette.Active() {
+				c.Position.Y += m.palette.Height()
 			}
 			v.Cursor = c
 		}
 	}
 
 	return v
-}
-
-// ---- ModelAccess interface implementation ----
-
-// Running returns whether the agent is currently executing.
-func (m *model) Running() bool { return m.running }
-
-// CancelAgent cancels the running agent context.
-func (m *model) CancelAgent() { m.cancelAgent() }
-
-// ClearHistory clears the TUI message history.
-func (m *model) ClearHistory() { m.history.Clear() }
-
-// AppendSystemMessage appends a system message to the chat history.
-func (m *model) AppendSystemMessage(content string) {
-	m.history.Append(compoent.NewSystemMessage(content))
-}
-
-func (m *model) adjustLayout() {
-	m.editor.SetWidth(m.width - 2)
-	m.output.SetWidth(m.width - 2)
-
-	paletteHeight := 0
-	if m.commandMode {
-		paletteHeight = min(len(m.commandMatches), 8) + 2 // content + border
-		if paletteHeight < 3 {
-			paletteHeight = 3 // minimum height (empty tip + border)
-		}
-	}
-	editorHeight := m.editor.Height()
-	totalBottom := editorHeight + paletteHeight + 1 // +1 for spacing
-	m.output.SetHeight(max(0, m.height-totalBottom))
 }

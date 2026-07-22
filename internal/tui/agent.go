@@ -13,8 +13,8 @@ import (
 
 // ---- agent actions ----
 
-// submitTask sends the current editor content to the agent for processing.
-func (m *model) submitTask() tea.Cmd {
+// startAgent sends the current editor content to the agent for processing.
+func (m *model) startAgent() tea.Cmd {
 	input := strings.TrimSpace(m.editor.Value())
 	if input == "" {
 		return nil
@@ -53,6 +53,14 @@ func (m *model) submitTask() tea.Cmd {
 
 	return waitCmd(ch)
 }
+
+// ---- ModelAccess interface implementation ----
+
+// Running returns whether the agent is currently executing.
+func (m *model) Running() bool { return m.running }
+
+// CancelAgent cancels the running agent context.
+func (m *model) CancelAgent() { m.cancelAgent() }
 
 // cancelAgent cancels the running agent context, stopping the ReAct loop.
 func (m *model) cancelAgent() {
