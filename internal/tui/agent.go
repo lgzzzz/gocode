@@ -7,6 +7,8 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/lgzzzz/gocode/internal/agent"
+	"github.com/lgzzzz/gocode/internal/store"
+	"github.com/lgzzzz/gocode/internal/tui/compoent"
 )
 
 // ---- agent actions ----
@@ -64,4 +66,89 @@ func (m *model) cancelAgent() {
 	}
 	// The goroutine will receive context.Canceled, send the error + done
 	// messages, and handleProgressMsg will transition out of running state.
+}
+
+// ---- progress handling ----
+
+// handleProgressMsg processes agent callback messages (streaming, tool calls, etc.).
+func (m *model) handleProgressMsg(msg progressMsg) []tea.Cmd {
+	if msg.err != nil {
+		m.history.Append(compoent.NewErrorMessage(msg.err.Error()))
+		return nil
+	}
+
+	if msg.done {
+		m.running = false
+		m.cancel = nil
+		m.ch = nil
+		return nil
+	}
+
+	// Persist complete messages (streaming messages are skipped inside).
+	m.persistMessage(msg)
+
+	switch msg.typ {
+	case agent.MsgAssistantStream, agent.MsgThinkingStream:
+		m.applyStreamUpdate(msg)
+
+	case agent.MsgToolResult:
+		m.applyToolResult(msg)
+
+	case agent.MsgToolCall:
+		m.history.Append(compoent.NewToolMessage(msg.id, msg.toolName, msg.toolArgs))
+
+	case agent.MsgError, agent.MsgRetryWait:
+		// Show error and retry messages in the history
+		m.history.Append(compoent.NewErrorMessage(msg.content))
+
+	default:
+		m.history.Append(compoent.NewAssistantMessage(msg.id, msg.content))
+	}
+
+	if m.ch != nil {
+		return []tea.Cmd{waitCmd(m.ch)}
+	}
+	return nil
+}
+
+// persistMessage persists only "complete" message types to the store.
+// Streaming messages (thinking_stream, assistant_stream) are skipped.
+func (m *model) persistMessage(msg progressMsg) {
+	if m.store == nil {
+		return
+	}
+
+	sm := store.Message{
+		SessionID:  m.sessionID,
+		ToolCallID: msg.id,
+		ToolName:   msg.toolName,
+		ToolArgs:   msg.toolArgs,
+	}
+
+	switch msg.typ {
+	// ---- complete thinking ----
+	case agent.MsgThinking:
+		sm.MsgType = "thinking"
+		sm.Content = msg.content
+
+	// ---- complete assistant reply ----
+	case agent.MsgAssistant:
+		sm.MsgType = "assistant"
+		sm.Content = msg.content
+
+	// ---- tool call ----
+	case agent.MsgToolCall:
+		sm.MsgType = "tool_call"
+		sm.Content = msg.content
+
+	// ---- tool result ----
+	case agent.MsgToolResult:
+		sm.MsgType = "tool_result"
+		sm.Content = msg.content
+		sm.HasError = msg.toolErr != nil
+	default:
+		return
+	}
+
+	m.store.AppendMessage(sm)
 }
