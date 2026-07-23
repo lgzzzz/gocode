@@ -60,7 +60,7 @@ func (m *model) ListSessions() string {
 // EnterSessionBrowser loads sessions from the store and activates
 // the interactive session browser, replacing the output viewport.
 func (m *model) EnterSessionBrowser() {
-	m.sessionBrowser.SetSize(m.width, m.output.Height())
+	m.sessionBrowser.SetSize(m.width, m.height)
 	if err := m.sessionBrowser.Reload(); err != nil {
 		m.history.Append(compoent.NewErrorMessage(err.Error()))
 		return

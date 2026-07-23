@@ -12,6 +12,7 @@ import (
 	"charm.land/bubbles/v2/list"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/lgzzzz/gocode/internal/store"
 )
@@ -54,14 +55,6 @@ var (
 			BorderLeft(true).
 			BorderStyle(lipgloss.ThickBorder()).
 			BorderForeground(lipgloss.Color("8"))
-
-	sessionFirstMsgStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("15")).
-				MaxWidth(80)
-
-	sessionMetaStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("8")).
-				MaxWidth(80)
 )
 
 // ---- sessionDelegate ----
@@ -69,7 +62,7 @@ var (
 // sessionDelegate implements list.ItemDelegate for session items.
 type sessionDelegate struct{}
 
-func (d sessionDelegate) Height() int  { return 2 }
+func (d sessionDelegate) Height() int  { return 1 }
 func (d sessionDelegate) Spacing() int { return 0 }
 
 func (d sessionDelegate) Render(w io.Writer, m list.Model, index int, item list.Item) {
@@ -78,33 +71,33 @@ func (d sessionDelegate) Render(w io.Writer, m list.Model, index int, item list.
 		return
 	}
 
-	// First line: first user message (truncated)
+	// Time prefix.
+	t, _ := time.Parse(time.RFC3339, si.Session.CreatedAt)
+	timeStr := t.Local().Format("2006-01-02 15:04")
+
+	// First user message (trimmed).
 	firstMsg := si.Session.FirstMsg
 	if firstMsg == "" {
 		firstMsg = "(empty session)"
 	}
 	firstMsg = strings.TrimSpace(firstMsg)
-	if len(firstMsg) > 100 {
-		firstMsg = firstMsg[:97] + "..."
-	}
 
-	// Second line: metadata
-	t, _ := time.Parse(time.RFC3339, si.Session.CreatedAt)
-	timeStr := t.Local().Format("2006-01-02 15:04")
-	meta := fmt.Sprintf("%s  %s  %d msgs  %s",
-		timeStr, si.Session.Model, si.Session.MessageCount,
-		si.Session.CWD)
-
-	// Selected vs dimmed style
+	// Selected vs dimmed style.
 	style := sessionDimStyle
 	if index == m.Index() {
 		style = sessionSelectedStyle
 	}
 
-	rendered := style.Render(lipgloss.JoinVertical(lipgloss.Left,
-		sessionFirstMsgStyle.Render(firstMsg),
-		sessionMetaStyle.Render(meta),
-	))
+	line := timeStr + "  " + firstMsg
+
+	blockWidth := m.Width()
+	textWidth := blockWidth - style.GetHorizontalPadding() - style.GetHorizontalBorderSize()
+	if textWidth < 1 {
+		textWidth = 1
+	}
+
+	line = ansi.Truncate(line, textWidth, "")
+	rendered := style.Width(blockWidth).Render(line)
 
 	fmt.Fprint(w, rendered)
 }
@@ -135,10 +128,9 @@ func New(width, height int, store SessionStore) *Browser {
 	l.SetShowTitle(false)
 	l.SetShowFilter(false)
 	l.SetShowHelp(false)
-	l.SetShowStatusBar(true)
+	l.SetShowStatusBar(false)
 	l.SetShowPagination(true)
 	l.SetFilteringEnabled(false)
-	l.SetStatusBarItemName("session", "sessions")
 	l.Styles.TitleBar = lipgloss.NewStyle()
 	l.Styles.StatusBar = lipgloss.NewStyle().
 		Foreground(lipgloss.Color("8")).
@@ -146,8 +138,8 @@ func New(width, height int, store SessionStore) *Browser {
 	l.KeyMap.Quit.SetEnabled(false)
 	l.KeyMap.ForceQuit.SetEnabled(false)
 
-	// Use per-page = max(height / itemHeight, 1) — delegate height 2 + spacing 0
-	perPage := height / 2
+	// Use per-page = height (delegate height 1 + spacing 0)
+	perPage := height
 	if perPage < 1 {
 		perPage = 1
 	}

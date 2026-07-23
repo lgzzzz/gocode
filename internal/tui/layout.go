@@ -20,7 +20,7 @@ func (m *model) adjustLayout() {
 	m.output.SetHeight(outputHeight)
 
 	if m.sessionBrowser.Active() {
-		m.sessionBrowser.SetSize(m.width-2, outputHeight)
+		m.sessionBrowser.SetSize(m.width-2, m.height)
 	}
 }
 

@@ -124,6 +124,12 @@ func (m model) View() tea.View {
 		return v
 	}
 
+	// Session browser takes over the entire screen when active.
+	if m.sessionBrowser.Active() {
+		v.SetContent(m.sessionBrowser.View())
+		return v
+	}
+
 	var editorArea string
 	if m.running {
 		editorArea = inputBarDimStyle.Render("⏳ Processing... (Esc to stop)")
@@ -138,15 +144,8 @@ func (m model) View() tea.View {
 		}
 	}
 
-	// Place the editor below the output area.
-	var middleArea string
-	if m.sessionBrowser.Active() {
-		middleArea = m.sessionBrowser.View()
-	} else {
-		middleArea = m.output.View()
-	}
 	v.SetContent(lipgloss.JoinVertical(lipgloss.Left,
-		middleArea,
+		m.output.View(),
 		"",
 		editorArea,
 	))
