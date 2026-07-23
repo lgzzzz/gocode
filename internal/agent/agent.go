@@ -48,13 +48,9 @@ const (
 
 // CallbackMsg is passed to the progress callback during agent execution.
 type CallbackMsg struct {
-	ID   string  // message ID (for tool calls: tool call ID; for streaming: generated message ID)
-	Type MsgType // event type
-
-	Content string
-
-	Reasoning string // reasoning_content for assistant (set for MsgAssistant)
-
+	ID         string  // message ID
+	Type       MsgType // event type
+	Content    string
 	ToolCallID string // tool call ID (set for tool_call and tool_result)
 	ToolName   string // tool name (set for tool_call)
 	ToolArgs   string // tool arguments JSON (set for tool_call)
@@ -379,7 +375,6 @@ func (a *Agent) SystemPrompt() string {
 type HistoryMessage struct {
 	MsgType    string // uses MsgXxx constants
 	Content    string
-	Reasoning  string // reasoning_content for assistant messages
 	ToolCallID string
 	ToolName   string
 	ToolArgs   string

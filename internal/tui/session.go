@@ -57,7 +57,7 @@ func (m *model) LoadSession(sessionID string) {
 		case string(agent.MsgAssistant):
 			m.history.Append(compoent.NewAssistantMessage(msg.MsgID, msg.Content))
 		case string(agent.MsgThinking):
-			m.history.Append(compoent.NewThinkingMessage(msg.MsgID, msg.Reasoning))
+			m.history.Append(compoent.NewThinkingMessage(msg.MsgID, msg.Content))
 		case string(agent.MsgToolCall):
 			m.history.Append(compoent.NewToolMessage(msg.MsgID, msg.ToolName, msg.ToolArgs))
 		case string(agent.MsgToolResult):
@@ -71,7 +71,6 @@ func (m *model) LoadSession(sessionID string) {
 		agentMsgs[i] = agent.HistoryMessage{
 			MsgType:    m.MsgType,
 			Content:    m.Content,
-			Reasoning:  m.Reasoning,
 			ToolCallID: m.ToolCallID,
 			ToolName:   m.ToolName,
 			ToolArgs:   m.ToolArgs,
