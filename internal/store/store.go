@@ -1,6 +1,7 @@
 package store
 
 import (
+	"bufio"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -40,99 +41,117 @@ type Message struct {
 }
 
 // ---- file format ----
-
-type fileData struct {
-	Sessions []Session `json:"sessions"`
-	Messages []Message `json:"messages"`
-}
+//
+// Each session is stored in a single file under the store directory.
+//   - Line 1:   JSON-encoded Session (compact, no newlines in values)
+//   - Line 2..N: JSON-encoded Message, one per line
+//
+// File name: <SessionID>.session
 
 // ---- Store ----
 
 type Store struct {
 	mu       sync.Mutex
-	path     string
-	sessions map[string]*Session // SessionID -> Session
-	messages map[string][]Message // SessionID -> ordered messages
+	dir      string
+	sessions map[string]*Session // SessionID → Session
+	messages map[string][]Message // SessionID → ordered messages
 }
 
-func defaultPath() string {
+// sessionFileName returns the file name for a given session ID.
+func sessionFileName(id string) string {
+	return id + ".session"
+}
+
+// defaultDir returns the default store directory (~/.gocode/sessions).
+func defaultDir() string {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		home = "."
 	}
-	dir := filepath.Join(home, ".gocode")
-	os.MkdirAll(dir, 0700)
-	return filepath.Join(dir, "sessions.json")
+	dir := filepath.Join(home, ".gocode", "sessions")
+	return dir
 }
 
+// Open opens (or creates) the session store at the given directory.
+// If path is empty, uses ~/.gocode/sessions.
 func Open(path string) (*Store, error) {
 	if path == "" {
-		path = defaultPath()
+		path = defaultDir()
+	}
+
+	if err := os.MkdirAll(path, 0700); err != nil {
+		return nil, err
 	}
 
 	s := &Store{
-		path:     path,
+		dir:      path,
 		sessions: make(map[string]*Session),
 		messages: make(map[string][]Message),
 	}
 
-	data, err := os.ReadFile(path)
+	// Scan existing session files into memory.
+	entries, err := os.ReadDir(path)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return s, nil // fresh store
+		return s, nil // empty store
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
 		}
-		return nil, err
-	}
-
-	var fd fileData
-	if err := json.Unmarshal(data, &fd); err != nil {
-		// If the file is corrupted, start fresh.
-		return s, nil
-	}
-
-	for i := range fd.Sessions {
-		sess := fd.Sessions[i]
-		s.sessions[sess.SessionID] = &sess
-	}
-	for _, msg := range fd.Messages {
-		s.messages[msg.SessionID] = append(s.messages[msg.SessionID], msg)
+		if filepath.Ext(entry.Name()) != ".session" {
+			continue
+		}
+		s.loadSessionFile(filepath.Join(path, entry.Name()))
 	}
 
 	return s, nil
 }
 
-func (s *Store) Close() error {
-	return s.flush()
-}
-
-func (s *Store) flush() error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	var fd fileData
-	for _, sess := range s.sessions {
-		fd.Sessions = append(fd.Sessions, *sess)
-	}
-	// Sort sessions by CreatedAt descending for stable output
-	sort.Slice(fd.Sessions, func(i, j int) bool {
-		return fd.Sessions[i].CreatedAt > fd.Sessions[j].CreatedAt
-	})
-
-	for _, msgs := range s.messages {
-		fd.Messages = append(fd.Messages, msgs...)
-	}
-
-	data, err := json.MarshalIndent(fd, "", "  ")
+// loadSessionFile reads a single .session file into memory.
+func (s *Store) loadSessionFile(filePath string) {
+	f, err := os.Open(filePath)
 	if err != nil {
-		return err
+		return
 	}
-	return os.WriteFile(s.path, data, 0600)
+	defer f.Close()
+
+	scanner := bufio.NewScanner(f)
+	// Increase buffer for long lines (tool output may be large).
+	scanner.Buffer(make([]byte, 0, 256*1024), 16*1024*1024)
+
+	lineNum := 0
+	var sessionID string
+	for scanner.Scan() {
+		line := scanner.Bytes()
+		if lineNum == 0 {
+			var sess Session
+			if err := json.Unmarshal(line, &sess); err != nil {
+				return // corrupted file, skip
+			}
+			s.sessions[sess.SessionID] = &sess
+			sessionID = sess.SessionID
+		} else {
+			var msg Message
+			if err := json.Unmarshal(line, &msg); err == nil {
+				s.messages[sessionID] = append(s.messages[sessionID], msg)
+			}
+		}
+		lineNum++
+	}
 }
 
+// Close is a no-op; all data is written through to disk immediately.
+func (s *Store) Close() error {
+	return nil
+}
+
+// NewSessionID generates a new unique session identifier.
 func NewSessionID() string {
 	return uuid.New().String()
 }
 
+// EnsureSession creates a session record if it doesn't already exist.
 func (s *Store) EnsureSession(id, model, cwd string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -147,9 +166,11 @@ func (s *Store) EnsureSession(id, model, cwd string) error {
 		Model:     model,
 		CWD:       cwd,
 	}
-	return s.flushLocked()
+
+	return s.writeSessionFile(id)
 }
 
+// ListSessions returns sessions ordered by CreatedAt descending.
 func (s *Store) ListSessions(limit int) ([]Session, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -167,6 +188,7 @@ func (s *Store) ListSessions(limit int) ([]Session, error) {
 	return list, nil
 }
 
+// AppendMessage appends a message to the session and persists it to disk.
 func (s *Store) AppendMessage(msg Message) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -175,16 +197,25 @@ func (s *Store) AppendMessage(msg Message) error {
 
 	s.messages[msg.SessionID] = append(s.messages[msg.SessionID], msg)
 
-	// Set FirstMsg on the first user message
+	// Update FirstMsg on the first user message of this session.
+	needRewrite := false
 	if sess, ok := s.sessions[msg.SessionID]; ok {
 		if sess.FirstMsg == "" && msg.MsgType == "user" {
 			sess.FirstMsg = msg.Content
+			needRewrite = true
 		}
 	}
 
-	return s.flushLocked()
+	// If the session header changed or the file doesn't exist yet,
+	// rewrite the entire file. Otherwise just append the message line.
+	filePath := filepath.Join(s.dir, sessionFileName(msg.SessionID))
+	if needRewrite || !fileExists(filePath) {
+		return s.writeSessionFile(msg.SessionID)
+	}
+	return s.appendMessageLine(filePath, msg)
 }
 
+// GetSessionMessages returns all persisted messages for a session.
 func (s *Store) GetSessionMessages(sessionID string) ([]Message, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -198,23 +229,62 @@ func (s *Store) GetSessionMessages(sessionID string) ([]Message, error) {
 	return out, nil
 }
 
-// flushLocked writes data to disk; caller must hold s.mu.
-func (s *Store) flushLocked() error {
-	var fd fileData
-	for _, sess := range s.sessions {
-		fd.Sessions = append(fd.Sessions, *sess)
-	}
-	sort.Slice(fd.Sessions, func(i, j int) bool {
-		return fd.Sessions[i].CreatedAt > fd.Sessions[j].CreatedAt
-	})
+// ---- internal helpers (caller must hold s.mu) ----
 
-	for _, msgs := range s.messages {
-		fd.Messages = append(fd.Messages, msgs...)
+// writeSessionFile writes (or rewrites) the full session file:
+// line 1 = Session JSON, remaining lines = Message JSON each.
+func (s *Store) writeSessionFile(id string) error {
+	sess, ok := s.sessions[id]
+	if !ok {
+		return nil
 	}
 
-	data, err := json.MarshalIndent(fd, "", "  ")
+	filePath := filepath.Join(s.dir, sessionFileName(id))
+	f, err := os.Create(filePath)
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(s.path, data, 0600)
+	defer f.Close()
+
+	// Line 1: Session JSON (compact, single line).
+	sessJSON, err := json.Marshal(sess)
+	if err != nil {
+		return err
+	}
+	f.Write(sessJSON)
+	f.Write([]byte{'\n'})
+
+	// Remaining lines: each message as a single JSON line.
+	for _, msg := range s.messages[id] {
+		msgJSON, err := json.Marshal(msg)
+		if err != nil {
+			return err
+		}
+		f.Write(msgJSON)
+		f.Write([]byte{'\n'})
+	}
+
+	return nil
+}
+
+// appendMessageLine appends a single message JSON line to an existing file.
+func (s *Store) appendMessageLine(filePath string, msg Message) error {
+	f, err := os.OpenFile(filePath, os.O_APPEND|os.O_WRONLY, 0600)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	msgJSON, err := json.Marshal(msg)
+	if err != nil {
+		return err
+	}
+	_, err = f.Write(append(msgJSON, '\n'))
+	return err
+}
+
+// fileExists reports whether the given path exists and is a regular file.
+func fileExists(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && !info.IsDir()
 }
