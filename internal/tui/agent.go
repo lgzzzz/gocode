@@ -33,13 +33,7 @@ func (m *model) StartAgent(input string) tea.Cmd {
 		}()
 		ag.Run(ctx, input, func(msg agent.CallbackMsg) {
 			ch <- progressMsg{
-				typ:       msg.Type,
-				id:        msg.ID,
-				content:   msg.Content,
-				reasoning: msg.Reasoning,
-				toolName:  msg.ToolName,
-				toolArgs:  msg.ToolArgs,
-				toolErr:   msg.Err,
+				msg: msg,
 			}
 		})
 		ch <- progressMsg{done: true}
@@ -81,24 +75,20 @@ func (m *model) handleProgressMsg(msg progressMsg) []tea.Cmd {
 	}
 
 	// Persist complete messages (streaming messages are skipped inside).
-	m.persistMessage(msg)
-
-	switch msg.typ {
-	case agent.MsgAssistantStream, agent.MsgThinkingStream,
-		agent.MsgAssistant, agent.MsgThinking:
-		m.applyStreamUpdate(msg)
-
-	case agent.MsgToolResult:
-		m.applyToolResult(msg)
-
+	agentMsg := msg.msg
+	m.persistMessage(agentMsg)
+	switch agentMsg.Type {
+	case agent.MsgAssistantStream:
+		m.history.Upsert(compoent.NewAssistantMessage(agentMsg.ID, agentMsg.Content))
+	case agent.MsgThinkingStream:
+		m.history.Upsert(compoent.NewThinkingMessage(agentMsg.ID, agentMsg.Reasoning))
 	case agent.MsgToolCall:
-		m.history.Append(compoent.NewToolMessage(msg.id, msg.toolName, msg.toolArgs))
-
+		m.history.Append(compoent.NewToolMessage(agentMsg.ID, agentMsg.ToolName, agentMsg.ToolArgs))
+	case agent.MsgToolResult:
+		hasErr := agentMsg.ToolErr != nil
+		m.history.UpdateToolResult(agentMsg.ID, agentMsg.Content, hasErr)
 	case agent.MsgError, agent.MsgRetryWait:
-		m.history.Append(compoent.NewErrorMessage(msg.content))
-
-	default:
-		m.history.Append(compoent.NewAssistantMessage(msg.id, msg.content))
+		m.history.Append(compoent.NewErrorMessage(agentMsg.Content))
 	}
 
 	if m.ch != nil {
@@ -109,37 +99,36 @@ func (m *model) handleProgressMsg(msg progressMsg) []tea.Cmd {
 
 // persistMessage persists only "complete" message types to the store.
 // Streaming messages (thinking_stream, assistant_stream) are skipped.
-func (m *model) persistMessage(msg progressMsg) {
+func (m *model) persistMessage(msg agent.CallbackMsg) {
 	if m.store == nil {
 		return
 	}
 
 	sm := store.Message{
-		SessionID:  m.sessionID,
-		ToolCallID: msg.id,
-		ToolName:   msg.toolName,
-		ToolArgs:   msg.toolArgs,
-		Reasoning:  msg.reasoning,
+		SessionID: m.sessionID,
+		MsgID:     msg.ID,
 	}
 
-	switch msg.typ {
+	switch msg.Type {
 	case agent.MsgThinking:
 		sm.MsgType = string(agent.MsgThinking)
-		sm.Content = msg.content
+		sm.Reasoning = msg.Reasoning
 
 	case agent.MsgAssistant:
 		sm.MsgType = string(agent.MsgAssistant)
-		sm.Content = msg.content
-		sm.Reasoning = msg.reasoning
+		sm.Content = msg.Content
 
 	case agent.MsgToolCall:
 		sm.MsgType = string(agent.MsgToolCall)
-		sm.Content = msg.content
+		sm.ToolCallID = msg.ToolCallID
+		sm.ToolName = msg.ToolName
+		sm.ToolArgs = msg.ToolArgs
 
 	case agent.MsgToolResult:
 		sm.MsgType = string(agent.MsgToolResult)
-		sm.Content = msg.content
-		sm.HasError = msg.toolErr != nil
+		sm.ToolCallID = msg.ToolCallID
+		sm.Content = msg.Content
+		sm.HasError = msg.ToolErr != nil
 
 	default:
 		return

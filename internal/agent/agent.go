@@ -3,16 +3,28 @@ package agent
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"runtime"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	goopenai "github.com/sashabaranov/go-openai"
 
-	"github.com/lgzzzz/gocode/internal/openai"
 	"github.com/lgzzzz/gocode/internal/tools"
 )
+
+// Logger is the logging interface used by Agent.
+// Implementations must be safe for concurrent use.
+type Logger interface {
+	Printf(format string, v ...interface{})
+}
+
+// nopLogger is the default no-op logger.
+type nopLogger struct{}
+
+func (nopLogger) Printf(string, ...interface{}) {}
 
 // ---- callback message types ----
 
@@ -24,34 +36,41 @@ const (
 	MsgAssistantStream MsgType = "assistant_stream" // streaming assistant content (not persisted)
 	MsgThinking        MsgType = "thinking"         // complete thinking/reasoning (persisted)
 	MsgAssistant       MsgType = "assistant"        // complete assistant reply (persisted)
-	MsgToolCall        MsgType = "tool_call"        // tool call issued
-	MsgToolResult      MsgType = "tool_result"      // tool execution result
-	MsgError           MsgType = "error"            // API call error (may be followed by retry)
-	MsgRetryWait       MsgType = "retry_wait"       // waiting before retrying after an error
-	MsgUser            MsgType = "user"
+
+	MsgToolCall   MsgType = "tool_call"   // tool call issued
+	MsgToolResult MsgType = "tool_result" // tool execution result
+
+	MsgError     MsgType = "error"      // API call error (may be followed by retry)
+	MsgRetryWait MsgType = "retry_wait" // waiting before retrying after an error
+
+	MsgUser MsgType = "user"
 )
 
 // CallbackMsg is passed to the progress callback during agent execution.
 type CallbackMsg struct {
-	Type       MsgType // event type
-	ID         string  // message ID (for tool calls: tool call ID; for streaming: generated message ID)
-	Content    string  // accumulated content (streaming) or full message
-	Reasoning  string  // reasoning_content for assistant (set for MsgAssistant)
-	ToolCallID string  // tool call ID (set for tool_call and tool_result)
-	ToolName   string  // tool name (set for tool_call)
-	ToolArgs   string  // tool arguments JSON (set for tool_call)
-	Err        error   // tool execution error (set for tool_result)
+	ID   string  // message ID (for tool calls: tool call ID; for streaming: generated message ID)
+	Type MsgType // event type
+
+	Content string
+
+	Reasoning string // reasoning_content for assistant (set for MsgAssistant)
+
+	ToolCallID string // tool call ID (set for tool_call and tool_result)
+	ToolName   string // tool name (set for tool_call)
+	ToolArgs   string // tool arguments JSON (set for tool_call)
+	ToolErr    error  // tool execution error (set for tool_result)
 }
 
 // Agent implements a ReAct-style loop using OpenAI-compatible function calling.
 type Agent struct {
-	client          *openai.Client
+	client          *goopenai.Client
 	model           string
-	oaiTools        []openai.Tool
+	oaiTools        []goopenai.Tool
 	toolDefs        []tools.ToolDef // tool definitions for system prompt generation
 	toolMap         map[string]tools.ToolExecutor
 	cwd             string
-	contextMessages []openai.Message // conversation contextMessages
+	contextMessages []goopenai.ChatCompletionMessage // conversation contextMessages
+	logger          Logger                           // optional logger (defaults to no-op)
 }
 
 // New creates a new Agent with the given API key, model, and base URL.
@@ -61,15 +80,17 @@ func New(apiKey, model, baseURL string) *Agent {
 		baseURL = "https://api.deepseek.com"
 	}
 
-	client := openai.NewClient(apiKey, baseURL)
+	config := goopenai.DefaultConfig(apiKey)
+	config.BaseURL = baseURL
+	client := goopenai.NewClientWithConfig(config)
 
 	tm, defs := tools.AllTools()
 
-	var oaiTools []openai.Tool
+	var oaiTools []goopenai.Tool
 	for _, d := range defs {
-		oaiTools = append(oaiTools, openai.Tool{
-			Type: "function",
-			Function: openai.FunctionDef{
+		oaiTools = append(oaiTools, goopenai.Tool{
+			Type: goopenai.ToolTypeFunction,
+			Function: &goopenai.FunctionDefinition{
 				Name:        d.Name,
 				Description: d.Description,
 				Parameters:  d.Parameters.(map[string]any),
@@ -86,6 +107,7 @@ func New(apiKey, model, baseURL string) *Agent {
 		toolDefs: defs,
 		toolMap:  tm,
 		cwd:      cwd,
+		logger:   nopLogger{},
 	}
 }
 
@@ -98,37 +120,35 @@ func New(apiKey, model, baseURL string) *Agent {
 func (a *Agent) Run(ctx context.Context, userMessage string, cb func(CallbackMsg)) {
 	// Initialize history with system prompt on first run
 	if len(a.contextMessages) == 0 {
-		a.contextMessages = []openai.Message{
-			openai.SystemMessage(a.systemPrompt()),
+		a.contextMessages = []goopenai.ChatCompletionMessage{
+			sysMsg(a.systemPrompt()),
 		}
 	}
 
 	// Append the new user message to history
-	a.contextMessages = append(a.contextMessages, openai.UserMessage(userMessage))
+	a.contextMessages = append(a.contextMessages, userMsg(userMessage))
 
 	messages := a.contextMessages
 
 	for {
-		msgID := uuid.New().String()
-
-		fullContent, fullReasoning, toolCalls, err := a.streamOne(ctx, messages, msgID, cb)
+		fullContent, fullReasoning, toolCalls, err := a.streamOne(ctx, messages, cb)
 		if err != nil {
 			return
 		}
-
 		// If the model wants to call tools
 		if len(toolCalls) > 0 {
 			// Build the assistant message that requested tool calls
-			assistantMsg := openai.AssistantMessage(fullContent)
+			assistantMsg := asstMsg(fullContent)
 			assistantMsg.ReasoningContent = fullReasoning
 			assistantMsg.ToolCalls = toolCalls
 
 			messages = append(messages, assistantMsg)
 
 			for _, tc := range toolCalls {
+				toolMsgId := uuid.NewString()
 				cb(CallbackMsg{
 					Type:       MsgToolCall,
-					ID:         tc.ID,
+					ID:         toolMsgId,
 					ToolCallID: tc.ID,
 					ToolName:   tc.Function.Name,
 					ToolArgs:   tc.Function.Arguments,
@@ -158,19 +178,19 @@ func (a *Agent) Run(ctx context.Context, userMessage string, cb func(CallbackMsg
 
 				cb(CallbackMsg{
 					Type:       MsgToolResult,
-					ID:         tc.ID,
-					Content:    result,
+					ID:         toolMsgId,
 					ToolCallID: tc.ID,
-					Err:        toolErr,
+					Content:    result,
+					ToolErr:    toolErr,
 				})
 
-				messages = append(messages, openai.ToolMessage(result, tc.ID))
+				messages = append(messages, toolMsg(result, tc.ID))
 			}
 			continue
 		}
 
 		// Final text response — append to history (with reasoning_content)
-		assistantMsg := openai.AssistantMessage(fullContent)
+		assistantMsg := asstMsg(fullContent)
 		assistantMsg.ReasoningContent = fullReasoning
 		messages = append(messages, assistantMsg)
 		a.contextMessages = messages
@@ -185,15 +205,14 @@ func (a *Agent) Run(ctx context.Context, userMessage string, cb func(CallbackMsg
 // backoff between attempts.
 func (a *Agent) streamOne(
 	ctx context.Context,
-	messages []openai.Message,
-	msgID string,
+	messages []goopenai.ChatCompletionMessage,
 	cb func(CallbackMsg),
-) (content string, reasoning string, toolCalls []openai.ToolCall, err error) {
+) (content string, reasoning string, toolCalls []goopenai.ToolCall, err error) {
 	const maxRetries = 3
 	baseDelay := 2 * time.Second
 
 	for attempt := 0; attempt <= maxRetries; attempt++ {
-		content, reasoning, toolCalls, err = a.streamOneAttempt(ctx, messages, msgID, cb)
+		content, reasoning, toolCalls, err = a.streamOneAttempt(ctx, messages, cb)
 		if err == nil {
 			return content, reasoning, toolCalls, nil
 		}
@@ -227,52 +246,62 @@ func (a *Agent) streamOne(
 // streamOneAttempt performs a single streaming chat completion attempt.
 func (a *Agent) streamOneAttempt(
 	ctx context.Context,
-	messages []openai.Message,
-	msgID string,
+	messages []goopenai.ChatCompletionMessage,
 	cb func(CallbackMsg),
-) (content string, reasoning string, toolCalls []openai.ToolCall, err error) {
-	req := openai.ChatCompletionRequest{
+) (content string, reasoning string, toolCalls []goopenai.ToolCall, err error) {
+	req := goopenai.ChatCompletionRequest{
 		Model:           a.model,
 		Messages:        messages,
 		Tools:           a.oaiTools,
+		Stream:          true,
 		ReasoningEffort: "max",
 	}
 
-	ch := a.client.StreamChatCompletion(ctx, req)
+	stream, err := a.client.CreateChatCompletionStream(ctx, req)
+	if err != nil {
+		return "", "", nil, fmt.Errorf("create stream: %w", err)
+	}
+	defer stream.Close()
 
 	var (
 		fullContent   strings.Builder
 		fullReasoning strings.Builder
-		tcMap         = make(map[int64]*toolCallAccum) // index -> accumulator
+		tcMap         = make(map[int]*toolCallAccum) // index -> accumulator
 	)
-
-	for sc := range ch {
-		if sc.Err != nil {
-			return "", "", nil, sc.Err
+	fullContentId := uuid.NewString()
+	fullReasoningId := uuid.NewString()
+	for {
+		resp, recvErr := stream.Recv()
+		if recvErr != nil {
+			if recvErr == io.EOF {
+				break
+			}
+			return "", "", nil, fmt.Errorf("stream recv: %w", recvErr)
 		}
 
-		chunk := sc.Chunk
-
-		if len(chunk.Choices) == 0 {
+		if len(resp.Choices) == 0 {
 			continue
 		}
-		delta := chunk.Choices[0].Delta
+		delta := resp.Choices[0].Delta
 
 		// Handle reasoning_content (DeepSeek)
 		if delta.ReasoningContent != "" {
 			fullReasoning.WriteString(delta.ReasoningContent)
-			cb(CallbackMsg{Type: MsgThinkingStream, ID: msgID, Content: fullReasoning.String()})
+			cb(CallbackMsg{Type: MsgThinkingStream, ID: fullReasoningId, Content: fullReasoning.String()})
 		}
 
 		// Handle regular content
 		if delta.Content != "" {
 			fullContent.WriteString(delta.Content)
-			cb(CallbackMsg{Type: MsgAssistantStream, ID: msgID, Content: fullContent.String()})
+			cb(CallbackMsg{Type: MsgAssistantStream, ID: fullContentId, Content: fullContent.String()})
 		}
 
 		// Handle tool calls (accumulate by index)
 		for _, tc := range delta.ToolCalls {
-			idx := tc.Index
+			idx := 0
+			if tc.Index != nil {
+				idx = *tc.Index
+			}
 			acc, ok := tcMap[idx]
 			if !ok {
 				acc = &toolCallAccum{}
@@ -282,7 +311,7 @@ func (a *Agent) streamOneAttempt(
 				acc.ID = tc.ID
 			}
 			if tc.Type != "" {
-				acc.Type = tc.Type
+				acc.Type = string(tc.Type)
 			}
 			if tc.Function.Name != "" {
 				acc.Name = tc.Function.Name
@@ -292,19 +321,20 @@ func (a *Agent) streamOneAttempt(
 	}
 
 	// Collect accumulated tool calls in index order
-	for i := int64(0); i < int64(len(tcMap)); i++ {
+	for i := 0; i < len(tcMap); i++ {
 		if acc, ok := tcMap[i]; ok {
-			toolCalls = append(toolCalls, openai.ToolCall{
+			toolCalls = append(toolCalls, goopenai.ToolCall{
 				ID:   acc.ID,
-				Type: acc.Type,
-				Function: openai.FunctionCall{
+				Type: goopenai.ToolType(acc.Type),
+				Function: goopenai.FunctionCall{
 					Name:      acc.Name,
 					Arguments: acc.Arguments,
 				},
 			})
 		}
 	}
-
+	cb(CallbackMsg{Type: MsgThinking, ID: fullReasoningId, Content: fullReasoning.String()})
+	cb(CallbackMsg{Type: MsgAssistant, ID: fullContentId, Content: fullContent.String()})
 	return fullContent.String(), fullReasoning.String(), toolCalls, nil
 }
 
@@ -319,13 +349,21 @@ type toolCallAccum struct {
 // Model returns the model name used by this agent.
 func (a *Agent) Model() string { return a.model }
 
+// SetLogger sets the logger used by the agent. Passing nil resets to no-op.
+func (a *Agent) SetLogger(l Logger) {
+	if l == nil {
+		l = nopLogger{}
+	}
+	a.logger = l
+}
+
 // ClearContextMessage resets the conversation history for a fresh session.
 func (a *Agent) ClearContextMessage() {
 	a.contextMessages = nil
 }
 
 // SetContextMessage replaces the conversation history with the given messages.
-func (a *Agent) SetContextMessage(contextMessages []openai.Message) {
+func (a *Agent) SetContextMessage(contextMessages []goopenai.ChatCompletionMessage) {
 	a.contextMessages = contextMessages
 }
 
@@ -350,76 +388,9 @@ type HistoryMessage struct {
 // ReconstructHistory rebuilds an OpenAI-compatible conversation history
 // from persisted messages. thinking messages are skipped (their content
 // is now embedded in the assistant message via the Reasoning field).
-func ReconstructHistory(msgs []HistoryMessage, systemPrompt string) []openai.Message {
-	history := []openai.Message{
-		openai.SystemMessage(systemPrompt),
-	}
-
-	i := 0
-	for i < len(msgs) {
-		m := msgs[i]
-
-		switch m.MsgType {
-		case string(MsgUser):
-			history = append(history, openai.UserMessage(m.Content))
-			i++
-
-		case string(MsgAssistant):
-			// Collect assistant content and reasoning
-			assistantContent := m.Content
-			assistantReasoning := m.Reasoning
-			i++ // consume assistant
-
-			// If the next message is a thinking, consume it (its content
-			// is already in the assistant's Reasoning field from persistence,
-			// but older sessions may have separate thinking messages).
-			if i < len(msgs) && msgs[i].MsgType == string(MsgThinking) {
-				if assistantReasoning == "" {
-					assistantReasoning = msgs[i].Content
-				}
-				i++ // consume thinking
-			}
-
-			// Collect tool_calls that immediately follow.
-			var toolCalls []openai.ToolCall
-			for i < len(msgs) && msgs[i].MsgType == string(MsgToolCall) {
-				tc := msgs[i]
-				toolCalls = append(toolCalls, openai.ToolCall{
-					ID:   tc.ToolCallID,
-					Type: "function",
-					Function: openai.FunctionCall{
-						Name:      tc.ToolName,
-						Arguments: tc.ToolArgs,
-					},
-				})
-				i++
-			}
-
-			assistantMsg := openai.AssistantMessage(assistantContent)
-			assistantMsg.ReasoningContent = assistantReasoning
-			if len(toolCalls) > 0 {
-				assistantMsg.ToolCalls = toolCalls
-			}
-			history = append(history, assistantMsg)
-
-			// Collect tool_results that follow.
-			for i < len(msgs) && msgs[i].MsgType == string(MsgToolResult) {
-				tr := msgs[i]
-				history = append(history, openai.ToolMessage(tr.Content, tr.ToolCallID))
-				i++
-			}
-
-		case string(MsgThinking):
-			// Standalone thinking (should not normally happen after the fix,
-			// but tolerate it for backward compatibility).
-			i++
-
-		default:
-			i++
-		}
-	}
-
-	return history
+func ReconstructHistory(msgs []HistoryMessage, systemPrompt string) []goopenai.ChatCompletionMessage {
+	// todo 需要完成
+	return nil
 }
 
 // systemPrompt builds the system prompt dynamically from the available tool
@@ -489,4 +460,22 @@ You help users by reading files, executing commands, editing code, and writing n
 	sb.WriteString(fmt.Sprintf("\nCurrent environment: %s", osName))
 
 	return sb.String()
+}
+
+// ---- message constructors ----
+
+func sysMsg(content string) goopenai.ChatCompletionMessage {
+	return goopenai.ChatCompletionMessage{Role: "system", Content: content}
+}
+
+func userMsg(content string) goopenai.ChatCompletionMessage {
+	return goopenai.ChatCompletionMessage{Role: "user", Content: content}
+}
+
+func asstMsg(content string) goopenai.ChatCompletionMessage {
+	return goopenai.ChatCompletionMessage{Role: "assistant", Content: content}
+}
+
+func toolMsg(content, toolCallID string) goopenai.ChatCompletionMessage {
+	return goopenai.ChatCompletionMessage{Role: "tool", Content: content, ToolCallID: toolCallID}
 }

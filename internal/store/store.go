@@ -28,16 +28,18 @@ type SessionInfo struct {
 
 // Message represents a single persisted message.
 type Message struct {
-	SessionID  string
-	Seq        int    // assigned automatically by AppendMessage
-	MsgType    string // uses agent.MsgXxx constants
-	Content    string
-	Reasoning  string // reasoning_content (DeepSeek), for assistant messages
+	SessionID string
+
+	MsgType string
+	MsgID   string
+
+	Content   string
+	Reasoning string
+
 	ToolName   string // only for tool_call
 	ToolArgs   string // only for tool_call
 	ToolCallID string // shared by tool_call and tool_result
 	HasError   bool   // tool_result or error
-	CreatedAt  string // ISO 8601
 }
 
 // Store manages session persistence using JSONL files.
