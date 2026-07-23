@@ -178,7 +178,7 @@ func (m *model) handleKeyPress(msg tea.KeyPressMsg) []tea.Cmd {
 			return nil
 		case "enter":
 			if sel := m.sessionBrowser.Selected(); sel != nil {
-				m.LoadSession(sel.ID)
+				m.LoadSession(sel.SessionID)
 			}
 			return nil
 		default:
