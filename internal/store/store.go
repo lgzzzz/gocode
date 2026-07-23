@@ -1,6 +1,8 @@
 package store
 
 import (
+	"time"
+
 	"github.com/google/uuid"
 )
 
@@ -30,6 +32,8 @@ type Message struct {
 	ToolCallID string // shared by tool_call and tool_result
 
 	HasError bool // tool_result or error
+
+	CreatTime time.Time // 根据这个时间的排序就可以知道消息的顺序
 }
 
 type Store struct {

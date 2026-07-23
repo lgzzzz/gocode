@@ -49,7 +49,7 @@ func (m *model) LoadSession(sessionID string) {
 
 	// 1. Rebuild TUI history: iterate and pair tool_call/tool_result.
 	m.history.Clear()
-	for i := 0; i < len(msgs); i++ {
+	for i := range msgs {
 		msg := msgs[i]
 		switch msg.MsgType {
 		case string(agent.MsgUser):
