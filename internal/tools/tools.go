@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"runtime"
 	"strings"
 	"time"
 )
@@ -43,6 +44,13 @@ func (t *ReadTool) Execute(argsJSON string) (string, error) {
 	}
 	if args.Path == "" {
 		return "", fmt.Errorf("read: path is required")
+	}
+	info, err := os.Stat(args.Path)
+	if err != nil {
+		return "", fmt.Errorf("read %s: %w", args.Path, err)
+	}
+	if info.IsDir() {
+		return "", fmt.Errorf("read: %s is a directory, not a file", args.Path)
 	}
 	data, err := os.ReadFile(args.Path)
 	if err != nil {
@@ -116,6 +124,13 @@ func (t *EditTool) Execute(argsJSON string) (string, error) {
 	if args.OldText == "" {
 		return "", fmt.Errorf("edit: oldText is required")
 	}
+	info, err := os.Stat(args.Path)
+	if err != nil {
+		return "", fmt.Errorf("edit: %w", err)
+	}
+	if info.IsDir() {
+		return "", fmt.Errorf("edit: %s is a directory, not a file", args.Path)
+	}
 	data, err := os.ReadFile(args.Path)
 	if err != nil {
 		return "", fmt.Errorf("edit: %w", err)
@@ -158,7 +173,7 @@ func (t *BashTool) Execute(argsJSON string) (string, error) {
 	if args.Timeout > 0 {
 		timeout = args.Timeout
 	}
-	cmd := exec.Command("bash", "-c", args.Command)
+	cmd := buildShellCmd(args.Command)
 	var out strings.Builder
 	cmd.Stdout = &out
 	cmd.Stderr = &out
@@ -185,6 +200,22 @@ func (t *BashTool) Execute(argsJSON string) (string, error) {
 		}
 		return fmt.Sprintf("(timed out after %ds)\n%s", timeout, out.String()), nil
 	}
+}
+
+// buildShellCmd returns an appropriate shell command for the current OS.
+func buildShellCmd(command string) *exec.Cmd {
+	if runtime.GOOS == "windows" {
+		// Prefer PowerShell for richer scripting; fall back to cmd if not available.
+		if _, err := exec.LookPath("powershell.exe"); err == nil {
+			return exec.Command("powershell", "-NoProfile", "-NonInteractive", "-Command", command)
+		}
+		return exec.Command("cmd", "/c", command)
+	}
+	// Unix-like: prefer bash, fall back to sh.
+	if _, err := exec.LookPath("bash"); err == nil {
+		return exec.Command("bash", "-c", command)
+	}
+	return exec.Command("sh", "-c", command)
 }
 
 // ---- helpers ----
@@ -254,13 +285,13 @@ func AllTools() (map[string]ToolExecutor, []ToolDef) {
 		},
 		{
 			Name:             "bash",
-			Description:      "Execute a bash command in the current working directory. Returns stdout and stderr combined.",
-			PromptSnippet:    "Execute bash commands (ls, grep, find, etc.)",
-			PromptGuidelines: []string{"Use bash for commands like ls, grep, find, go build, go test, git, etc."},
+			Description:      "Execute a shell command. On Unix, runs via bash (fallback sh). On Windows, runs via PowerShell (fallback cmd). Returns stdout and stderr combined.",
+			PromptSnippet:    "Execute shell commands (ls/dir, grep/findstr, find, go build, go test, git, etc.)",
+			PromptGuidelines: []string{"Use bash for commands like ls, grep, find, mkdir, go build, go test, git, etc. On Windows, use cmd/PowerShell equivalents (dir, findstr, etc)."},
 			Parameters: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
-					"command": map[string]any{"type": "string", "description": "Bash command to execute"},
+					"command": map[string]any{"type": "string", "description": "Shell command to execute"},
 					"timeout": map[string]any{"type": "integer", "description": "Timeout in seconds (default 30)"},
 				},
 				"required": []string{"command"},
