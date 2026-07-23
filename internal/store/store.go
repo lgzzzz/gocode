@@ -53,9 +53,9 @@ type Message struct {
 type Store struct {
 	mu       sync.Mutex
 	dir      string
-	sessions map[string]*Session   // SessionID -> Session
-	messages map[string][]Message  // SessionID -> ordered messages
-	writers  map[string]*os.File   // SessionID -> open file handle (append mode)
+	sessions map[string]*Session  // SessionID -> Session
+	messages map[string][]Message // SessionID -> ordered messages
+	writers  map[string]*os.File  // SessionID -> open file handle (append mode)
 }
 
 // sessionFileName returns the file name for a given session ID.
