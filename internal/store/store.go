@@ -53,8 +53,9 @@ type Message struct {
 type Store struct {
 	mu       sync.Mutex
 	dir      string
-	sessions map[string]*Session // SessionID → Session
-	messages map[string][]Message // SessionID → ordered messages
+	sessions map[string]*Session   // SessionID -> Session
+	messages map[string][]Message  // SessionID -> ordered messages
+	writers  map[string]*os.File   // SessionID -> open file handle (append mode)
 }
 
 // sessionFileName returns the file name for a given session ID.
@@ -87,6 +88,7 @@ func Open(path string) (*Store, error) {
 		dir:      path,
 		sessions: make(map[string]*Session),
 		messages: make(map[string][]Message),
+		writers:  make(map[string]*os.File),
 	}
 
 	// Scan existing session files into memory.
@@ -141,8 +143,15 @@ func (s *Store) loadSessionFile(filePath string) {
 	}
 }
 
-// Close is a no-op; all data is written through to disk immediately.
+// Close closes all open file handles. Call on program exit (Ctrl+C).
 func (s *Store) Close() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for id, w := range s.writers {
+		w.Close()
+		delete(s.writers, id)
+	}
 	return nil
 }
 
@@ -167,7 +176,7 @@ func (s *Store) EnsureSession(id, model, cwd string) error {
 		CWD:       cwd,
 	}
 
-	return s.writeSessionFile(id)
+	return s.writeSessionFileLocked(id)
 }
 
 // ListSessions returns sessions ordered by CreatedAt descending.
@@ -206,13 +215,14 @@ func (s *Store) AppendMessage(msg Message) error {
 		}
 	}
 
-	// If the session header changed or the file doesn't exist yet,
-	// rewrite the entire file. Otherwise just append the message line.
-	filePath := filepath.Join(s.dir, sessionFileName(msg.SessionID))
-	if needRewrite || !fileExists(filePath) {
-		return s.writeSessionFile(msg.SessionID)
+	// If FirstMsg changed (first user message), rewrite the entire file
+	// so the session header on line 1 stays correct.
+	if needRewrite {
+		return s.writeSessionFileLocked(msg.SessionID)
 	}
-	return s.appendMessageLine(filePath, msg)
+
+	// Fast path: append a single line using the open file handle.
+	return s.appendLineLocked(msg.SessionID, msg)
 }
 
 // GetSessionMessages returns all persisted messages for a session.
@@ -231,9 +241,31 @@ func (s *Store) GetSessionMessages(sessionID string) ([]Message, error) {
 
 // ---- internal helpers (caller must hold s.mu) ----
 
-// writeSessionFile writes (or rewrites) the full session file:
-// line 1 = Session JSON, remaining lines = Message JSON each.
-func (s *Store) writeSessionFile(id string) error {
+// getOrOpenWriter returns the cached file handle for the session,
+// or opens one in append mode if none is cached yet.
+func (s *Store) getOrOpenWriterLocked(id string) (*os.File, error) {
+	if w, ok := s.writers[id]; ok {
+		return w, nil
+	}
+	filePath := filepath.Join(s.dir, sessionFileName(id))
+	w, err := os.OpenFile(filePath, os.O_APPEND|os.O_WRONLY, 0600)
+	if err != nil {
+		return nil, err
+	}
+	s.writers[id] = w
+	return w, nil
+}
+
+// writeSessionFileLocked writes (or rewrites) the full session file.
+// Closes the previous handle (if any), creates a fresh file, writes
+// all data, then opens a new handle for future appends.
+func (s *Store) writeSessionFileLocked(id string) error {
+	// Close and remove old cached handle.
+	if old, ok := s.writers[id]; ok {
+		old.Close()
+		delete(s.writers, id)
+	}
+
 	sess, ok := s.sessions[id]
 	if !ok {
 		return nil
@@ -244,11 +276,11 @@ func (s *Store) writeSessionFile(id string) error {
 	if err != nil {
 		return err
 	}
-	defer f.Close()
 
 	// Line 1: Session JSON (compact, single line).
 	sessJSON, err := json.Marshal(sess)
 	if err != nil {
+		f.Close()
 		return err
 	}
 	f.Write(sessJSON)
@@ -258,33 +290,37 @@ func (s *Store) writeSessionFile(id string) error {
 	for _, msg := range s.messages[id] {
 		msgJSON, err := json.Marshal(msg)
 		if err != nil {
+			f.Close()
 			return err
 		}
 		f.Write(msgJSON)
 		f.Write([]byte{'\n'})
 	}
 
-	return nil
-}
+	// Keep the file open for future appends; swap the handle.
+	f.Close()
 
-// appendMessageLine appends a single message JSON line to an existing file.
-func (s *Store) appendMessageLine(filePath string, msg Message) error {
-	f, err := os.OpenFile(filePath, os.O_APPEND|os.O_WRONLY, 0600)
+	// Reopen in append mode and cache.
+	w, err := os.OpenFile(filePath, os.O_APPEND|os.O_WRONLY, 0600)
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	s.writers[id] = w
+	return nil
+}
+
+// appendLineLocked appends a single message JSON line using the cached
+// file handle. Opens the handle lazily if needed.
+func (s *Store) appendLineLocked(sessionID string, msg Message) error {
+	w, err := s.getOrOpenWriterLocked(sessionID)
+	if err != nil {
+		return err
+	}
 
 	msgJSON, err := json.Marshal(msg)
 	if err != nil {
 		return err
 	}
-	_, err = f.Write(append(msgJSON, '\n'))
+	_, err = w.Write(append(msgJSON, '\n'))
 	return err
-}
-
-// fileExists reports whether the given path exists and is a regular file.
-func fileExists(path string) bool {
-	info, err := os.Stat(path)
-	return err == nil && !info.IsDir()
 }
