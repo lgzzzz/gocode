@@ -136,6 +136,8 @@ func (t *EditTool) Execute(argsJSON string) (string, error) {
 		return "", fmt.Errorf("edit: %w", err)
 	}
 	content := string(data)
+	content = strings.ReplaceAll(content, "\r\n", "\n")
+	content = strings.ReplaceAll(content, "\r", "\n")
 	count := strings.Count(content, args.OldText)
 	if count == 0 {
 		return "", fmt.Errorf("edit: oldText not found in %s", args.Path)
@@ -150,7 +152,7 @@ func (t *EditTool) Execute(argsJSON string) (string, error) {
 	return fmt.Sprintf("Edited %s: replaced 1 occurrence", args.Path), nil
 }
 
-// ---- bash tool ----
+// ---- bash tool (Linux/Unix) ----
 
 type BashTool struct{}
 
@@ -169,11 +171,54 @@ func (t *BashTool) Execute(argsJSON string) (string, error) {
 	if args.Command == "" {
 		return "", fmt.Errorf("bash: command is required")
 	}
-	timeout := 30
-	if args.Timeout > 0 {
-		timeout = args.Timeout
+	return runShellCommand(args.Command, args.Timeout, "bash", buildLinuxShellCmd)
+}
+
+// buildLinuxShellCmd returns a shell command using bash (fallback sh).
+func buildLinuxShellCmd(command string) *exec.Cmd {
+	if _, err := exec.LookPath("bash"); err == nil {
+		return exec.Command("bash", "-c", command)
 	}
-	cmd := buildShellCmd(args.Command)
+	return exec.Command("sh", "-c", command)
+}
+
+// ---- powershell tool (Windows) ----
+
+type PowershellTool struct{}
+
+func (t *PowershellTool) Name() string { return "powershell" }
+
+type powershellArgs struct {
+	Command string `json:"command"`
+	Timeout int    `json:"timeout,omitempty"`
+}
+
+func (t *PowershellTool) Execute(argsJSON string) (string, error) {
+	var args powershellArgs
+	if err := json.Unmarshal([]byte(argsJSON), &args); err != nil {
+		return "", fmt.Errorf("powershell: bad arguments: %w", err)
+	}
+	if args.Command == "" {
+		return "", fmt.Errorf("powershell: command is required")
+	}
+	return runShellCommand(args.Command, args.Timeout, "powershell", buildWindowsShellCmd)
+}
+
+// buildWindowsShellCmd returns a shell command using PowerShell (fallback cmd).
+func buildWindowsShellCmd(command string) *exec.Cmd {
+	if _, err := exec.LookPath("powershell.exe"); err == nil {
+		return exec.Command("powershell", "-NoProfile", "-NonInteractive", "-Command", command)
+	}
+	return exec.Command("cmd", "/c", command)
+}
+
+// runShellCommand executes a shell command with a timeout and returns combined stdout/stderr.
+func runShellCommand(command string, timeoutSec int, toolName string, buildCmd func(string) *exec.Cmd) (string, error) {
+	timeout := 30
+	if timeoutSec > 0 {
+		timeout = timeoutSec
+	}
+	cmd := buildCmd(command)
 	var out strings.Builder
 	cmd.Stdout = &out
 	cmd.Stderr = &out
@@ -202,22 +247,6 @@ func (t *BashTool) Execute(argsJSON string) (string, error) {
 	}
 }
 
-// buildShellCmd returns an appropriate shell command for the current OS.
-func buildShellCmd(command string) *exec.Cmd {
-	if runtime.GOOS == "windows" {
-		// Prefer PowerShell for richer scripting; fall back to cmd if not available.
-		if _, err := exec.LookPath("powershell.exe"); err == nil {
-			return exec.Command("powershell", "-NoProfile", "-NonInteractive", "-Command", command)
-		}
-		return exec.Command("cmd", "/c", command)
-	}
-	// Unix-like: prefer bash, fall back to sh.
-	if _, err := exec.LookPath("bash"); err == nil {
-		return exec.Command("bash", "-c", command)
-	}
-	return exec.Command("sh", "-c", command)
-}
-
 // ---- helpers ----
 
 func dirOf(path string) string {
@@ -228,13 +257,23 @@ func dirOf(path string) string {
 }
 
 // AllTools returns a map of tool executors and their OpenAI function definitions.
+// Shell tools are selected based on the operating system:
+//   - Windows: powershell (with cmd fallback)
+//   - Linux/macOS/Unix: bash (with sh fallback)
 func AllTools() (map[string]ToolExecutor, []ToolDef) {
 	tools := map[string]ToolExecutor{
 		"read":  &ReadTool{},
 		"write": &WriteTool{},
 		"edit":  &EditTool{},
-		"bash":  &BashTool{},
 	}
+
+	// Select the appropriate shell tool based on OS
+	if runtime.GOOS == "windows" {
+		tools["powershell"] = &PowershellTool{}
+	} else {
+		tools["bash"] = &BashTool{}
+	}
+
 	defs := []ToolDef{
 		{
 			Name:             "read",
@@ -283,11 +322,13 @@ func AllTools() (map[string]ToolExecutor, []ToolDef) {
 				"required": []string{"path", "oldText", "newText"},
 			},
 		},
-		{
-			Name:             "bash",
-			Description:      "Execute a shell command. On Unix, runs via bash (fallback sh). On Windows, runs via PowerShell (fallback cmd). Returns stdout and stderr combined.",
-			PromptSnippet:    "Execute shell commands (ls/dir, grep/findstr, find, go build, go test, git, etc.)",
-			PromptGuidelines: []string{"Use bash for commands like ls, grep, find, mkdir, go build, go test, git, etc. On Windows, use cmd/PowerShell equivalents (dir, findstr, etc)."},
+	}
+
+	if runtime.GOOS == "windows" {
+		defs = append(defs, ToolDef{
+			Name:          "powershell",
+			Description:   "Execute a shell command on Windows systems. Runs via PowerShell (fallback cmd). Returns stdout and stderr combined.",
+			PromptSnippet: "Execute shell commands on Windows systems",
 			Parameters: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
@@ -296,7 +337,22 @@ func AllTools() (map[string]ToolExecutor, []ToolDef) {
 				},
 				"required": []string{"command"},
 			},
-		},
+		})
+	} else {
+		defs = append(defs, ToolDef{
+			Name:          "bash",
+			Description:   "Execute a shell command on Linux/Unix systems. Runs via bash (fallback sh). Returns stdout and stderr combined.",
+			PromptSnippet: "Execute shell commands on Linux/Unix systems",
+			Parameters: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"command": map[string]any{"type": "string", "description": "Shell command to execute"},
+					"timeout": map[string]any{"type": "integer", "description": "Timeout in seconds (default 30)"},
+				},
+				"required": []string{"command"},
+			},
+		})
 	}
+
 	return tools, defs
 }

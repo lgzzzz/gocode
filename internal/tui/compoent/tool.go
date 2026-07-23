@@ -143,7 +143,7 @@ func (m *ToolMessage) formatFirstLine() string {
 	case "write":
 		path := parseArgPath(m.args)
 		return "Write " + path
-	case "bash":
+	case "bash", "powershell":
 		cmd := parseArgCommand(m.args)
 		return cmd
 	default:

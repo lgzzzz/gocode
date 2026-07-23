@@ -167,7 +167,7 @@ func (a *Agent) Run(ctx context.Context, userMessage string, cb func(CallbackMsg
 					} else {
 						result = res
 						// Bash returns nil error even on non-zero exit; detect via result prefix.
-						if tc.Name == "bash" && (strings.HasPrefix(result, "exit ") || strings.HasPrefix(result, "(timed out")) {
+						if (tc.Name == "bash" || tc.Name == "powershell") && (strings.HasPrefix(result, "exit ") || strings.HasPrefix(result, "(timed out")) {
 							toolErr = fmt.Errorf("%s", strings.SplitN(result, "\n", 2)[0])
 						}
 					}
