@@ -14,8 +14,6 @@ import (
 // ---- agent actions ----
 
 // startAgent launches the agent with the given input string.
-// The caller is responsible for input validation, UI cleanup
-// (editor reset, history append), and persistence.
 func (m *model) startAgent(input string) tea.Cmd {
 	m.running = true
 
@@ -35,12 +33,13 @@ func (m *model) startAgent(input string) tea.Cmd {
 		}()
 		ag.Run(ctx, input, func(msg agent.CallbackMsg) {
 			ch <- progressMsg{
-				typ:      msg.Type,
-				id:       msg.ID,
-				content:  msg.Content,
-				toolName: msg.ToolName,
-				toolArgs: msg.ToolArgs,
-				toolErr:  msg.Err,
+				typ:       msg.Type,
+				id:        msg.ID,
+				content:   msg.Content,
+				reasoning: msg.Reasoning,
+				toolName:  msg.ToolName,
+				toolArgs:  msg.ToolArgs,
+				toolErr:   msg.Err,
 			}
 		})
 		ch <- progressMsg{done: true}
@@ -58,19 +57,16 @@ func (m *model) Running() bool { return m.running }
 // CancelAgent cancels the running agent context.
 func (m *model) CancelAgent() { m.cancelAgent() }
 
-// cancelAgent cancels the running agent context, stopping the ReAct loop.
 func (m *model) cancelAgent() {
 	if m.cancel != nil {
 		m.cancel()
 		m.cancel = nil
 	}
-	// The goroutine will receive context.Canceled, send the error + done
-	// messages, and handleProgressMsg will transition out of running state.
 }
 
 // ---- progress handling ----
 
-// handleProgressMsg processes agent callback messages (streaming, tool calls, etc.).
+// handleProgressMsg processes agent callback messages.
 func (m *model) handleProgressMsg(msg progressMsg) []tea.Cmd {
 	if msg.err != nil {
 		m.history.Append(compoent.NewErrorMessage(msg.err.Error()))
@@ -88,7 +84,8 @@ func (m *model) handleProgressMsg(msg progressMsg) []tea.Cmd {
 	m.persistMessage(msg)
 
 	switch msg.typ {
-	case agent.MsgAssistantStream, agent.MsgThinkingStream:
+	case agent.MsgAssistantStream, agent.MsgThinkingStream,
+		agent.MsgAssistant, agent.MsgThinking:
 		m.applyStreamUpdate(msg)
 
 	case agent.MsgToolResult:
@@ -98,7 +95,6 @@ func (m *model) handleProgressMsg(msg progressMsg) []tea.Cmd {
 		m.history.Append(compoent.NewToolMessage(msg.id, msg.toolName, msg.toolArgs))
 
 	case agent.MsgError, agent.MsgRetryWait:
-		// Show error and retry messages in the history
 		m.history.Append(compoent.NewErrorMessage(msg.content))
 
 	default:
@@ -123,29 +119,28 @@ func (m *model) persistMessage(msg progressMsg) {
 		ToolCallID: msg.id,
 		ToolName:   msg.toolName,
 		ToolArgs:   msg.toolArgs,
+		Reasoning:  msg.reasoning,
 	}
 
 	switch msg.typ {
-	// ---- complete thinking ----
 	case agent.MsgThinking:
 		sm.MsgType = string(agent.MsgThinking)
 		sm.Content = msg.content
 
-	// ---- complete assistant reply ----
 	case agent.MsgAssistant:
 		sm.MsgType = string(agent.MsgAssistant)
 		sm.Content = msg.content
+		sm.Reasoning = msg.reasoning
 
-	// ---- tool call ----
 	case agent.MsgToolCall:
 		sm.MsgType = string(agent.MsgToolCall)
 		sm.Content = msg.content
 
-	// ---- tool result ----
 	case agent.MsgToolResult:
 		sm.MsgType = string(agent.MsgToolResult)
 		sm.Content = msg.content
 		sm.HasError = msg.toolErr != nil
+
 	default:
 		return
 	}

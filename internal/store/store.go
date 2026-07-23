@@ -71,6 +71,7 @@ func (s *Store) migrate() error {
 		seq          INTEGER NOT NULL,
 		msg_type     TEXT NOT NULL,
 		content      TEXT NOT NULL DEFAULT '',
+		reasoning    TEXT NOT NULL DEFAULT '',
 		tool_name    TEXT DEFAULT NULL,
 		tool_args    TEXT DEFAULT NULL,
 		tool_call_id TEXT DEFAULT NULL,
@@ -82,5 +83,13 @@ func (s *Store) migrate() error {
 		ON messages(session_id, seq);
 	`
 	_, err := s.db.Exec(ddl)
-	return err
+	if err != nil {
+		return err
+	}
+
+	// Add reasoning column for databases created before the migration.
+	// SQLite returns "duplicate column" error if it already exists — safe to ignore.
+	s.db.Exec(`ALTER TABLE messages ADD COLUMN reasoning TEXT NOT NULL DEFAULT ''`)
+
+	return nil
 }

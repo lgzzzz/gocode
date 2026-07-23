@@ -27,8 +27,9 @@ type SessionInfo struct {
 type Message struct {
 	SessionID  string
 	Seq        int    // assigned automatically by AppendMessage
-	MsgType    string // uses agent.MsgXxx constants (MsgUser, MsgAssistant, etc.)
+	MsgType    string // uses agent.MsgXxx constants
 	Content    string
+	Reasoning  string // reasoning_content (DeepSeek), for assistant messages
 	ToolName   string // only for tool_call
 	ToolArgs   string // only for tool_call
 	ToolCallID string // shared by tool_call and tool_result
@@ -44,7 +45,6 @@ func NewSessionID() string {
 }
 
 // EnsureSession creates a session row if it does not already exist.
-// Safe to call multiple times – uses INSERT OR IGNORE.
 func (s *Store) EnsureSession(id, model, cwd string) error {
 	now := nowUTC()
 	_, err := s.db.Exec(
@@ -97,8 +97,6 @@ func (s *Store) ListSessions(limit int) ([]SessionInfo, error) {
 // ---- message operations ----
 
 // AppendMessage appends a complete message to the given session.
-// seq is computed automatically (max + 1) inside a transaction, and
-// the session's updated_at is refreshed.
 func (s *Store) AppendMessage(msg Message) error {
 	now := nowUTC()
 
@@ -124,10 +122,10 @@ func (s *Store) AppendMessage(msg Message) error {
 
 	// 2. Insert message.
 	_, err = tx.Exec(
-		`INSERT INTO messages (session_id, seq, msg_type, content,
+		`INSERT INTO messages (session_id, seq, msg_type, content, reasoning,
 			tool_name, tool_args, tool_call_id, has_error, created_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		msg.SessionID, seq, msg.MsgType, msg.Content,
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		msg.SessionID, seq, msg.MsgType, msg.Content, msg.Reasoning,
 		msg.ToolName, msg.ToolArgs, msg.ToolCallID,
 		boolToInt(msg.HasError), now,
 	)
@@ -148,7 +146,7 @@ func (s *Store) AppendMessage(msg Message) error {
 // ordered by seq ascending.
 func (s *Store) GetSessionMessages(sessionID string) ([]Message, error) {
 	rows, err := s.db.Query(
-		`SELECT session_id, seq, msg_type, content,
+		`SELECT session_id, seq, msg_type, content, reasoning,
 		        tool_name, tool_args, tool_call_id, has_error, created_at
 		 FROM messages
 		 WHERE session_id = ?
@@ -164,7 +162,7 @@ func (s *Store) GetSessionMessages(sessionID string) ([]Message, error) {
 	for rows.Next() {
 		var msg Message
 		if err := rows.Scan(
-			&msg.SessionID, &msg.Seq, &msg.MsgType, &msg.Content,
+			&msg.SessionID, &msg.Seq, &msg.MsgType, &msg.Content, &msg.Reasoning,
 			&msg.ToolName, &msg.ToolArgs, &msg.ToolCallID, &msg.HasError, &msg.CreatedAt,
 		); err != nil {
 			return nil, fmt.Errorf("store: scan message: %w", err)

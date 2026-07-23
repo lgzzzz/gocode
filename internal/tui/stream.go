@@ -10,14 +10,15 @@ import (
 // ---- progress message ----
 
 type progressMsg struct {
-	typ      agent.MsgType // callback message type
-	id       string        // message ID (for streaming updates)
-	content  string
-	toolName string // tool name (set for tool_call)
-	toolArgs string // tool arguments JSON (set for tool_call)
-	toolErr  error  // tool execution error (set for tool_result)
-	done     bool
-	err      error // fatal / panic error
+	typ       agent.MsgType // callback message type
+	id        string        // message ID (for streaming updates)
+	content   string
+	reasoning string // reasoning_content for assistant messages
+	toolName  string // tool name (set for tool_call)
+	toolArgs  string // tool arguments JSON (set for tool_call)
+	toolErr   error  // tool execution error (set for tool_result)
+	done      bool
+	err       error // fatal / panic error
 }
 
 func waitCmd(ch chan progressMsg) tea.Cmd {
@@ -34,9 +35,9 @@ func waitCmd(ch chan progressMsg) tea.Cmd {
 // used for finding the right component during streaming updates.
 func componentTypeStr(t agent.MsgType) string {
 	switch t {
-	case agent.MsgThinkingStream:
+	case agent.MsgThinkingStream, agent.MsgThinking:
 		return string(agent.MsgThinking)
-	case agent.MsgAssistantStream:
+	case agent.MsgAssistantStream, agent.MsgAssistant:
 		return string(agent.MsgAssistant)
 	default:
 		return string(agent.MsgAssistant)

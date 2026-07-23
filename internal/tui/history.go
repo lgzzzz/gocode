@@ -17,7 +17,6 @@ import (
 func (m *model) ClearHistory() { m.history.Clear() }
 
 // NewSession swaps to a new session ID and clears TUI history.
-// The actual DB session row is created lazily when the first message is sent.
 func (m *model) NewSession() {
 	m.history.Clear()
 	m.sessionID = store.NewSessionID()
@@ -58,7 +57,7 @@ func (m *model) ListSessions() string {
 // ---- session browser ----
 
 // EnterSessionBrowser loads sessions from the store and activates
-// the interactive session browser, replacing the output viewport.
+// the interactive session browser.
 func (m *model) EnterSessionBrowser() {
 	m.sessionBrowser.SetSize(m.width, m.height)
 	if err := m.sessionBrowser.Reload(); err != nil {
@@ -72,8 +71,7 @@ func (m *model) EnterSessionBrowser() {
 	m.sessionBrowser.SetActive(true)
 }
 
-// ExitSessionBrowser deactivates the session browser and restores
-// the normal output viewport.
+// ExitSessionBrowser deactivates the session browser.
 func (m *model) ExitSessionBrowser() {
 	m.sessionBrowser.SetActive(false)
 }
@@ -109,12 +107,13 @@ func (m *model) LoadSession(sessionID string) {
 		}
 	}
 
-	// 2. Rebuild Agent history.
+	// 2. Rebuild Agent history (with reasoning_content).
 	agentMsgs := make([]agent.HistoryMessage, len(msgs))
 	for i, m := range msgs {
 		agentMsgs[i] = agent.HistoryMessage{
 			MsgType:    m.MsgType,
 			Content:    m.Content,
+			Reasoning:  m.Reasoning,
 			ToolCallID: m.ToolCallID,
 			ToolName:   m.ToolName,
 			ToolArgs:   m.ToolArgs,
