@@ -1,26 +1,24 @@
 package store
 
 import (
-	"time"
-
 	"github.com/google/uuid"
 )
 
-// todo
-// 需要在这个文件中实现会话持久化, 要求SessionInfo和Message的定义绝对不能更改, 除了修改本文件,不要修改任何其他的问题
+// todo C:\Users\LGZ\IdeaProjects\gocode\internal\store\store.go 需要在这个文件中实现会话持久化, 要求Session和Message的定义绝对不能更改, 除了修改本文件,不要修改任何其他的文件
 
 type Session struct {
-	ID        string
+	SessionID string
 	CreatedAt string
-	UpdatedAt string
-	Model     string
-	CWD       string
-	FirstMsg  string // first user message, for list display
+
+	Model    string
+	CWD      string
+	FirstMsg string // first user message, for list display
 }
 
 // Message represents a single persisted message.
 type Message struct {
 	SessionID string
+	CreatedAt string
 
 	MsgType string
 	MsgID   string
@@ -32,8 +30,6 @@ type Message struct {
 	ToolCallID string // shared by tool_call and tool_result
 
 	HasError bool // tool_result or error
-
-	CreatTime time.Time // 根据这个时间的排序就可以知道消息的顺序
 }
 
 type Store struct {
