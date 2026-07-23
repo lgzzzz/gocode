@@ -57,7 +57,6 @@ func NewModel(ag *agent.Agent, st *store.Store) tea.Model {
 	ta.DynamicHeight = true    // 动态高度（自动根据内容调整）
 	ta.MinHeight = 1           // 最小 1 行
 	ta.MaxHeight = 7           // 最大 7 行
-	// 设置光标闪烁速度（默认 530ms，这里调快一些）
 	styles := ta.Styles()
 	styles.Cursor.BlinkSpeed = 500 * time.Millisecond
 	ta.SetStyles(styles)
