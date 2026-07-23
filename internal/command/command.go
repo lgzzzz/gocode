@@ -93,15 +93,6 @@ func (r *Registry) Filter(prefix string) []Executor {
 	return result
 }
 
-// Get returns the command with the exact given name, or false if not found.
-func (r *Registry) Get(name string) (Executor, bool) {
-	idx, ok := r.index[name]
-	if !ok {
-		return nil, false
-	}
-	return r.commands[idx], true
-}
-
 // All returns all registered commands in registration order.
 func (r *Registry) All() []Executor {
 	result := make([]Executor, len(r.commands))

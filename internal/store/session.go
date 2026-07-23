@@ -43,21 +43,6 @@ func NewSessionID() string {
 	return uuid.New().String()
 }
 
-// CreateSession inserts a new session and returns its UUID.
-func (s *Store) CreateSession(model, cwd string) (string, error) {
-	id := NewSessionID()
-	now := nowUTC()
-	_, err := s.db.Exec(
-		`INSERT INTO sessions (id, created_at, updated_at, model, cwd)
-		 VALUES (?, ?, ?, ?, ?)`,
-		id, now, now, model, cwd,
-	)
-	if err != nil {
-		return "", fmt.Errorf("store: create session: %w", err)
-	}
-	return id, nil
-}
-
 // EnsureSession creates a session row if it does not already exist.
 // Safe to call multiple times – uses INSERT OR IGNORE.
 func (s *Store) EnsureSession(id, model, cwd string) error {
@@ -71,11 +56,6 @@ func (s *Store) EnsureSession(id, model, cwd string) error {
 		return fmt.Errorf("store: ensure session: %w", err)
 	}
 	return nil
-}
-
-// UpdateSessionTime updates the updated_at field for the given session.
-func (s *Store) UpdateSessionTime(sessionID string) {
-	_, _ = s.db.Exec(`UPDATE sessions SET updated_at = ? WHERE id = ?`, nowUTC(), sessionID)
 }
 
 // ListSessions returns up to limit most recent sessions (by created_at DESC)
