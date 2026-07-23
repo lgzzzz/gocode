@@ -1,10 +1,7 @@
 package tui
 
 import (
-	"fmt"
 	"os"
-	"strings"
-	"time"
 
 	"github.com/lgzzzz/gocode/internal/agent"
 	"github.com/lgzzzz/gocode/internal/store"
@@ -13,52 +10,17 @@ import (
 
 // ---- ModelAccess interface implementation ----
 
-// ClearHistory clears the TUI message history.
-func (m *model) ClearHistory() { m.history.Clear() }
-
 // NewSession swaps to a new session ID and clears TUI history.
 func (m *model) NewSession() {
+	m.agent.ClearContextMessage()
 	m.history.Clear()
 	m.sessionID = store.NewSessionID()
 	m.cwd, _ = os.Getwd()
 }
 
-// AppendSystemMessage appends a system message to the chat history.
-func (m *model) AppendSystemMessage(content string) {
-	m.history.Append(compoent.NewSystemMessage(content))
-}
-
-// ListSessions returns a formatted string listing recent sessions.
-func (m *model) ListSessions() string {
-	if m.store == nil {
-		return ""
-	}
-	sessions, err := m.store.ListSessions(20)
-	if err != nil || len(sessions) == 0 {
-		return ""
-	}
-
-	var sb strings.Builder
-	sb.WriteString("📋 最近会话:\n\n")
-
-	for _, s := range sessions {
-		t, _ := time.Parse(time.RFC3339, s.CreatedAt)
-		timeStr := t.Local().Format("2006-01-02 15:04")
-		marker := ""
-		if s.ID == m.sessionID {
-			marker = " ◀ 当前"
-		}
-		sb.WriteString(fmt.Sprintf("  %s  %s  %d 条消息  %s%s\n",
-			timeStr, s.Model, s.MessageCount, s.CWD, marker))
-	}
-	return sb.String()
-}
-
-// ---- session browser ----
-
-// EnterSessionBrowser loads sessions from the store and activates
+// OpenSessionBrowser loads sessions from the store and activates
 // the interactive session browser.
-func (m *model) EnterSessionBrowser() {
+func (m *model) OpenSessionBrowser() {
 	m.sessionBrowser.SetSize(m.width, m.height)
 	if err := m.sessionBrowser.Reload(); err != nil {
 		m.history.Append(compoent.NewErrorMessage(err.Error()))
@@ -71,8 +33,8 @@ func (m *model) EnterSessionBrowser() {
 	m.sessionBrowser.SetActive(true)
 }
 
-// ExitSessionBrowser deactivates the session browser.
-func (m *model) ExitSessionBrowser() {
+// CloseSessionBrowser deactivates the session browser.
+func (m *model) CloseSessionBrowser() {
 	m.sessionBrowser.SetActive(false)
 }
 
@@ -120,7 +82,7 @@ func (m *model) LoadSession(sessionID string) {
 		}
 	}
 	openaiHistory := agent.ReconstructHistory(agentMsgs, m.agent.SystemPrompt())
-	m.agent.SetHistory(openaiHistory)
+	m.agent.SetContextMessage(openaiHistory)
 
 	// 3. Switch to the loaded session.
 	m.sessionID = sessionID

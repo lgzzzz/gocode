@@ -19,26 +19,16 @@ type Executor interface {
 // Env holds references to the agent and TUI model, which commands can
 // freely use during execution.
 type Env struct {
-	Agent AgentAccess // agent access interface
-	Model ModelAccess // TUI model access interface
+	TUI TUIAccess // TUI model access interface
 }
 
-// AgentAccess defines the operations a command can perform on the agent.
+// TUIAccess defines the operations a command can perform on the TUI model.
 // The method set is intentionally minimal and grows as needed.
-type AgentAccess interface {
-	ClearHistory()
-}
-
-// ModelAccess defines the operations a command can perform on the TUI model.
-// The method set is intentionally minimal and grows as needed.
-type ModelAccess interface {
+type TUIAccess interface {
 	Running() bool
 	CancelAgent()
-	ClearHistory()
-	NewSession() // creates a new session in store and clears TUI history
-	AppendSystemMessage(content string)
-	ListSessions() string       // returns formatted list of recent sessions
-	EnterSessionBrowser()       // activates the interactive session browser
+	NewSession()         // creates a new session in store and clears TUI history
+	OpenSessionBrowser() // activates the interactive session browser
 }
 
 // ---- Command Result ----

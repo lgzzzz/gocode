@@ -174,7 +174,7 @@ func (m *model) handleKeyPress(msg tea.KeyPressMsg) []tea.Cmd {
 	if m.sessionBrowser.Active() {
 		switch msg.String() {
 		case "esc", "ctrl+c":
-			m.ExitSessionBrowser()
+			m.CloseSessionBrowser()
 			return nil
 		case "enter":
 			if sel := m.sessionBrowser.Selected(); sel != nil {
@@ -267,7 +267,7 @@ func (m *model) handleKeyPress(msg tea.KeyPressMsg) []tea.Cmd {
 				})
 			}
 
-			cmd := m.startAgent(input)
+			cmd := m.StartAgent(input)
 			if cmd != nil {
 				cmds = append(cmds, cmd)
 			}
@@ -285,8 +285,7 @@ func (m *model) handleKeyPress(msg tea.KeyPressMsg) []tea.Cmd {
 // for dismissing the palette and resetting the editor beforehand.
 func (m *model) executeCommand(cmd command.Executor, args string) tea.Cmd {
 	env := &command.Env{
-		Agent: m.agent,
-		Model: m, // *model implements ModelAccess directly
+		TUI: m, // *model implements ModelAccess directly
 	}
 
 	ctx := context.Background()

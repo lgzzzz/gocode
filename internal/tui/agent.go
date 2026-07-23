@@ -13,8 +13,8 @@ import (
 
 // ---- agent actions ----
 
-// startAgent launches the agent with the given input string.
-func (m *model) startAgent(input string) tea.Cmd {
+// StartAgent launches the agent with the given input string.
+func (m *model) StartAgent(input string) tea.Cmd {
 	m.running = true
 
 	ctx, cancel := context.WithCancel(context.Background())

@@ -45,13 +45,13 @@ type CallbackMsg struct {
 
 // Agent implements a ReAct-style loop using OpenAI-compatible function calling.
 type Agent struct {
-	client   *openai.Client
-	model    string
-	oaiTools []openai.Tool
-	toolDefs []tools.ToolDef // tool definitions for system prompt generation
-	toolMap  map[string]tools.ToolExecutor
-	cwd      string
-	history  []openai.Message // conversation history
+	client          *openai.Client
+	model           string
+	oaiTools        []openai.Tool
+	toolDefs        []tools.ToolDef // tool definitions for system prompt generation
+	toolMap         map[string]tools.ToolExecutor
+	cwd             string
+	contextMessages []openai.Message // conversation contextMessages
 }
 
 // New creates a new Agent with the given API key, model, and base URL.
@@ -97,16 +97,16 @@ func New(apiKey, model, baseURL string) *Agent {
 // API and included back in assistant messages on subsequent requests.
 func (a *Agent) Run(ctx context.Context, userMessage string, cb func(CallbackMsg)) {
 	// Initialize history with system prompt on first run
-	if len(a.history) == 0 {
-		a.history = []openai.Message{
+	if len(a.contextMessages) == 0 {
+		a.contextMessages = []openai.Message{
 			openai.SystemMessage(a.systemPrompt()),
 		}
 	}
 
 	// Append the new user message to history
-	a.history = append(a.history, openai.UserMessage(userMessage))
+	a.contextMessages = append(a.contextMessages, openai.UserMessage(userMessage))
 
-	messages := a.history
+	messages := a.contextMessages
 
 	for {
 		msgID := uuid.New().String()
@@ -173,7 +173,7 @@ func (a *Agent) Run(ctx context.Context, userMessage string, cb func(CallbackMsg
 		assistantMsg := openai.AssistantMessage(fullContent)
 		assistantMsg.ReasoningContent = fullReasoning
 		messages = append(messages, assistantMsg)
-		a.history = messages
+		a.contextMessages = messages
 		return
 	}
 }
@@ -319,14 +319,14 @@ type toolCallAccum struct {
 // Model returns the model name used by this agent.
 func (a *Agent) Model() string { return a.model }
 
-// ClearHistory resets the conversation history for a fresh session.
-func (a *Agent) ClearHistory() {
-	a.history = nil
+// ClearContextMessage resets the conversation history for a fresh session.
+func (a *Agent) ClearContextMessage() {
+	a.contextMessages = nil
 }
 
-// SetHistory replaces the conversation history with the given messages.
-func (a *Agent) SetHistory(history []openai.Message) {
-	a.history = history
+// SetContextMessage replaces the conversation history with the given messages.
+func (a *Agent) SetContextMessage(contextMessages []openai.Message) {
+	a.contextMessages = contextMessages
 }
 
 // SystemPrompt returns the system prompt string.
