@@ -381,11 +381,84 @@ type HistoryMessage struct {
 }
 
 // ReconstructHistory rebuilds an OpenAI-compatible conversation history
-// from persisted messages. thinking messages are skipped (their content
-// is now embedded in the assistant message via the Reasoning field).
+// from persisted messages. thinking messages are merged into the following
+// assistant message via ReasoningContent, and tool_call messages are grouped
+// into the preceding assistant message as ToolCalls.
 func ReconstructHistory(msgs []HistoryMessage, systemPrompt string) []goopenai.ChatCompletionMessage {
-	// todo 需要完成
-	return nil
+	var result []goopenai.ChatCompletionMessage
+
+	// Always start with the system prompt.
+	result = append(result, goopenai.ChatCompletionMessage{
+		Role:    goopenai.ChatMessageRoleSystem,
+		Content: systemPrompt,
+	})
+	var pendingAssistant goopenai.ChatCompletionMessage
+	addPendingAssistant := func() {
+		if pendingAssistant.Content != "" || pendingAssistant.ReasoningContent != "" {
+			result = append(result, pendingAssistant)
+			pendingAssistant = goopenai.ChatCompletionMessage{
+				Role: goopenai.ChatMessageRoleAssistant,
+			}
+		}
+	}
+	i := 0
+	for i < len(msgs) {
+		msg := msgs[i]
+		switch msg.MsgType {
+		case string(MsgUser):
+			addPendingAssistant()
+			result = append(result, goopenai.ChatCompletionMessage{
+				Role:    goopenai.ChatMessageRoleUser,
+				Content: msg.Content,
+			})
+			i++
+		case string(MsgThinking):
+			if pendingAssistant.ReasoningContent != "" {
+				// 预期之外的情况, 直接报个错
+				panic(`pendingAssistant.ReasoningContent != ""`)
+			}
+			pendingAssistant.ReasoningContent = msg.Content
+			i++
+		case string(MsgAssistant):
+			if pendingAssistant.Content != "" {
+				// 预期之外的情况, 直接报个错
+				panic(`pendingAssistant.Content != ""`)
+			}
+			pendingAssistant.Content = msg.Content
+			i++
+		case string(MsgToolCall):
+			if pendingAssistant.Content == "" && pendingAssistant.ReasoningContent == "" {
+				panic(`pendingAssistant.Content == "" && pendingAssistant.ReasoningContent == ""`)
+			}
+			pendingAssistant.ToolCalls = append(pendingAssistant.ToolCalls, goopenai.ToolCall{
+				ID:   msg.ToolCallID,
+				Type: goopenai.ToolTypeFunction,
+				Function: goopenai.FunctionCall{
+					Name:      msg.ToolName,
+					Arguments: msg.ToolArgs,
+				},
+			})
+			i++
+		case string(MsgToolResult):
+			if len(pendingAssistant.ToolCalls) == 0 {
+				// 预期之外的情况, 直接报个错
+				panic(`pendingAssistant.ToolCalls == 0`)
+			}
+			addPendingAssistant()
+			result = append(result, goopenai.ChatCompletionMessage{
+				Role:       goopenai.ChatMessageRoleTool,
+				Content:    msg.Content,
+				ToolCallID: msg.ToolCallID,
+			})
+			i++
+
+		default:
+			i++
+		}
+	}
+	addPendingAssistant()
+
+	return result
 }
 
 // systemPrompt builds the system prompt dynamically from the available tool
