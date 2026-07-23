@@ -392,7 +392,9 @@ func ReconstructHistory(msgs []HistoryMessage, systemPrompt string) []goopenai.C
 		Role:    goopenai.ChatMessageRoleSystem,
 		Content: systemPrompt,
 	})
-	var pendingAssistant goopenai.ChatCompletionMessage
+	var pendingAssistant = goopenai.ChatCompletionMessage{
+		Role: goopenai.ChatMessageRoleAssistant,
+	}
 	addPendingAssistant := func() {
 		if pendingAssistant.Content != "" || pendingAssistant.ReasoningContent != "" {
 			result = append(result, pendingAssistant)

@@ -106,7 +106,9 @@ func (m *model) persistMessage(msg progressMsg) {
 	if m.store == nil {
 		return
 	}
-
+	if msg.Type != agent.MsgAssistant && msg.Type != agent.MsgThinking && msg.Type != agent.MsgToolCall && msg.Type != agent.MsgToolResult {
+		return
+	}
 	sm := store.Message{
 		SessionID:  m.sessionID,
 		MsgID:      msg.ID,
