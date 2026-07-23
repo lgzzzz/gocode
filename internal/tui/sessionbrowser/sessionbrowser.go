@@ -22,15 +22,15 @@ import (
 // SessionStore is the storage abstraction required by Browser.
 // The concrete store.Store satisfies this interface automatically.
 type SessionStore interface {
-	ListSessions(limit int) ([]store.SessionInfo, error)
+	ListSessions(limit int) ([]store.Session, error)
 	GetSessionMessages(sessionID string) ([]store.Message, error)
 }
 
 // ---- sessionItem ----
 
-// sessionItem adapts store.SessionInfo to the list.Item interface.
+// sessionItem adapts store.Session to the list.Item interface.
 type sessionItem struct {
-	Session store.SessionInfo
+	Session store.Session
 }
 
 // FilterValue returns the first user message for filtering (unused: filtering is disabled).
@@ -183,7 +183,7 @@ func (b *Browser) Reload() error {
 }
 
 // SetSessions populates the browser with the given sessions.
-func (b *Browser) SetSessions(sessions []store.SessionInfo) {
+func (b *Browser) SetSessions(sessions []store.Session) {
 	items := make([]list.Item, len(sessions))
 	for i, s := range sessions {
 		items[i] = sessionItem{Session: s}
@@ -192,7 +192,7 @@ func (b *Browser) SetSessions(sessions []store.SessionInfo) {
 }
 
 // Selected returns the currently selected session, or nil if none.
-func (b *Browser) Selected() *store.SessionInfo {
+func (b *Browser) Selected() *store.Session {
 	item := b.list.SelectedItem()
 	if item == nil {
 		return nil

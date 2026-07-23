@@ -4,9 +4,10 @@ import (
 	"github.com/google/uuid"
 )
 
-// -4--- types ----
+// todo
+// 需要在这个文件中实现会话持久化, 要求SessionInfo和Message的定义绝对不能更改, 除了修改本文件,不要修改任何其他的问题
 
-type SessionInfo struct {
+type Session struct {
 	ID        string
 	CreatedAt string
 	UpdatedAt string
@@ -22,7 +23,7 @@ type Message struct {
 	MsgType string
 	MsgID   string
 
-	Content string
+	Content string // shared by tool_result, thinking message, assistant message, user message
 
 	ToolName   string // only for tool_call
 	ToolArgs   string // only for tool_call
@@ -51,7 +52,7 @@ func (s *Store) EnsureSession(id, model, cwd string) error {
 	panic("not implement")
 }
 
-func (s *Store) ListSessions(limit int) ([]SessionInfo, error) {
+func (s *Store) ListSessions(limit int) ([]Session, error) {
 	panic("not implement")
 }
 
