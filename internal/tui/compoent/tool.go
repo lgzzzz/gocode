@@ -1,6 +1,7 @@
 package compoent
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 )
@@ -100,9 +101,10 @@ const maxToolResultLines = 6
 
 // renderLocked builds the rendered string for the given width.
 func (m *ToolMessage) renderLocked(width int) string {
-	argsPreview := truncateStr(m.args, 150)
-	content := m.name + "(" + argsPreview + ")"
+	firstLine := m.formatFirstLine()
 
+	// Build result lines (if any).
+	var body string
 	if m.state != ToolStateExecuting && m.result != "" {
 		lines := strings.Split(m.result, "\n")
 		if len(lines) > maxToolResultLines {
@@ -110,14 +112,65 @@ func (m *ToolMessage) renderLocked(width int) string {
 			lines = append(lines[:maxToolResultLines],
 				fmt.Sprintf("...%d more lines...", skipped))
 		}
-		content += "\n" + strings.Join(lines, "\n")
+		body = "\n" + strings.Join(lines, "\n")
 	}
 
+	// Determine style based on tool state.
 	style := toolStyle
+	boldStyle := toolBoldStyle
 	if m.state == ToolStateError {
 		style = toolErrorStyle
+		boldStyle = toolErrorBoldStyle
 	}
-	return strings.TrimSpace(style.Width(width - 1).Render(strings.TrimSpace(content)))
+
+	// Render first line bold, body normal.
+	rendered := strings.TrimSpace(boldStyle.Width(width - 1).Render(firstLine))
+	if body != "" {
+		rendered += "\n" + strings.TrimSpace(style.Width(width - 1).Render(strings.TrimSpace(body)))
+	}
+	return rendered
+}
+
+// formatFirstLine builds the bold first line based on tool name and args.
+func (m *ToolMessage) formatFirstLine() string {
+	switch m.name {
+	case "edit":
+		path := parseArgPath(m.args)
+		return "Edit " + path
+	case "read":
+		path := parseArgPath(m.args)
+		return "Read " + path
+	case "write":
+		path := parseArgPath(m.args)
+		return "Write " + path
+	case "bash":
+		cmd := parseArgCommand(m.args)
+		return cmd
+	default:
+		return m.name + "(" + truncateStr(m.args, 150) + ")"
+	}
+}
+
+// parseArgPath extracts the "path" field from a JSON args string.
+func parseArgPath(argsJSON string) string {
+	var args struct {
+		Path string `json:"path"`
+	}
+	if err := json.Unmarshal([]byte(argsJSON), &args); err != nil || args.Path == "" {
+		return "(unknown path)"
+	}
+	return truncateStr(args.Path, 200)
+}
+
+// parseArgCommand extracts the "command" field from a JSON args string.
+func parseArgCommand(argsJSON string) string {
+	var args struct {
+		Command string `json:"command"`
+	}
+	if err := json.Unmarshal([]byte(argsJSON), &args); err != nil || args.Command == "" {
+		return "(unknown command)"
+	}
+	return truncateStr(args.Command, 200)
 }
 
 func truncateStr(s string, max int) string {

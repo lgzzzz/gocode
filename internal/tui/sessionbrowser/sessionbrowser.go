@@ -81,6 +81,7 @@ func (d sessionDelegate) Render(w io.Writer, m list.Model, index int, item list.
 		firstMsg = "(empty session)"
 	}
 	firstMsg = strings.TrimSpace(firstMsg)
+	firstMsg = strings.ReplaceAll(firstMsg, "\n", " ")
 
 	// Selected vs dimmed style.
 	style := sessionDimStyle
