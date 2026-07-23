@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"runtime"
 	"strings"
 	"time"
 
@@ -507,6 +508,18 @@ You help users by reading files, executing commands, editing code, and writing n
 
 	// Current working directory
 	sb.WriteString(fmt.Sprintf("\nCurrent working directory: %s", a.cwd))
+
+	// Current operating system environment
+	osName := runtime.GOOS
+	switch osName {
+	case "windows":
+		osName = "Windows"
+	case "linux":
+		osName = "Linux"
+	case "darwin":
+		osName = "macOS"
+	}
+	sb.WriteString(fmt.Sprintf("\nCurrent environment: %s", osName))
 
 	return sb.String()
 }
