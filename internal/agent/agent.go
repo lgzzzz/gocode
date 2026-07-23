@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	openai "github.com/openai/openai-go"
 	"github.com/openai/openai-go/option"
 	"github.com/openai/openai-go/shared"
@@ -52,7 +53,6 @@ type Agent struct {
 	toolMap  map[string]tools.ToolExecutor
 	cwd      string
 	history  []openai.ChatCompletionMessageParamUnion // conversation history
-	msgCount int                                      // counter for generating unique message IDs
 }
 
 func New(apiKey, model, baseURL string) *Agent {
@@ -117,30 +117,11 @@ func (a *Agent) Run(ctx context.Context, userMessage string, cb func(CallbackMsg
 	messages := a.history
 
 	for {
-		a.msgCount++
-		msgID := fmt.Sprintf("msg-%d", a.msgCount)
+		msgID := uuid.New().String()
 
-		fullContent, fullReasoning, toolCalls, err := a.streamOne(ctx, messages, msgID, cb)
+		fullContent, _, toolCalls, err := a.streamOne(ctx, messages, msgID, cb)
 		if err != nil {
 			return
-		}
-
-		// Thinking complete
-		if fullReasoning != "" {
-			cb(CallbackMsg{
-				Type:    MsgThinking,
-				ID:      msgID,
-				Content: fullReasoning,
-			})
-		}
-
-		// Assistant message complete
-		if fullContent != "" {
-			cb(CallbackMsg{
-				Type:    MsgAssistant,
-				ID:      msgID,
-				Content: fullContent,
-			})
 		}
 
 		// If the model wants to call tools
@@ -418,11 +399,23 @@ func ReconstructHistory(msgs []HistoryMessage, systemPrompt string) []openai.Cha
 			i++
 
 		case "assistant":
-			// Collect tool_calls that immediately follow this assistant message.
+			// assistant: normal path — host for subsequent tool_calls.
+			// tool_call: orphan path — no preceding assistant message
+			//   (happens when model calls tools without outputting text).
+			//   Create an empty assistant message as host.
 			var toolCalls []openai.ChatCompletionMessageToolCallParam
-			j := i + 1
-			for j < len(msgs) && msgs[j].MsgType == "tool_call" {
-				tc := msgs[j]
+
+			// If this is an assistant message, collect its content.
+			// If this is an orphan tool_call, content stays empty.
+			assistantContent := ""
+			if m.MsgType == "assistant" {
+				assistantContent = m.Content
+				i++ // consume assistant
+			}
+
+			// Collect tool_calls that immediately follow.
+			for i < len(msgs) && msgs[i].MsgType == "tool_call" {
+				tc := msgs[i]
 				toolCalls = append(toolCalls, openai.ChatCompletionMessageToolCallParam{
 					ID:   tc.ToolCallID,
 					Type: "function",
@@ -431,27 +424,23 @@ func ReconstructHistory(msgs []HistoryMessage, systemPrompt string) []openai.Cha
 						Arguments: tc.ToolArgs,
 					},
 				})
-				j++
+				i++
 			}
 
-			assistantMsg := openai.AssistantMessage(m.Content)
+			assistantMsg := openai.AssistantMessage(assistantContent)
 			if len(toolCalls) > 0 {
 				assistantMsg.OfAssistant.ToolCalls = toolCalls
 			}
 			history = append(history, assistantMsg)
 
-			// Collect tool_results that follow the tool_calls.
-			for j < len(msgs) && msgs[j].MsgType == "tool_result" {
-				tr := msgs[j]
+			// Collect tool_results that follow.
+			for i < len(msgs) && msgs[i].MsgType == "tool_result" {
+				tr := msgs[i]
 				history = append(history, openai.ToolMessage(tr.Content, tr.ToolCallID))
-				j++
+				i++
 			}
 
-			i = j
-
-		case "thinking", "tool_call", "tool_result":
-			// thinking: not part of OpenAI conversation format.
-			// tool_call / tool_result: handled inside the assistant loop above.
+		case "thinking":
 			i++
 
 		default:
