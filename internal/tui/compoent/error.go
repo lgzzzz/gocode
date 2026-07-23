@@ -1,5 +1,7 @@
 package compoent
 
+import "github.com/lgzzzz/gocode/internal/agent"
+
 // ErrorMessage renders an error message.
 type ErrorMessage struct {
 	content     string
@@ -15,7 +17,7 @@ func NewErrorMessage(content string) *ErrorMessage {
 	return m
 }
 
-func (m *ErrorMessage) Type() string    { return "error" }
+func (m *ErrorMessage) Type() string    { return string(agent.MsgError) }
 func (m *ErrorMessage) MsgID() string   { return "" }
 func (m *ErrorMessage) Content() string { return m.content }
 

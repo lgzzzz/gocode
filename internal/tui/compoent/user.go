@@ -1,5 +1,7 @@
 package compoent
 
+import "github.com/lgzzzz/gocode/internal/agent"
+
 // UserMessage renders a user chat message.
 type UserMessage struct {
 	content     string
@@ -15,7 +17,7 @@ func NewUserMessage(content string) *UserMessage {
 	return m
 }
 
-func (m *UserMessage) Type() string    { return "user" }
+func (m *UserMessage) Type() string    { return string(agent.MsgUser) }
 func (m *UserMessage) MsgID() string   { return "" }
 func (m *UserMessage) Content() string { return m.content }
 

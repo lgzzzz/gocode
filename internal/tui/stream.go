@@ -35,11 +35,11 @@ func waitCmd(ch chan progressMsg) tea.Cmd {
 func componentTypeStr(t agent.MsgType) string {
 	switch t {
 	case agent.MsgThinkingStream:
-		return "thinking"
+		return string(agent.MsgThinking)
 	case agent.MsgAssistantStream:
-		return "assistant"
+		return string(agent.MsgAssistant)
 	default:
-		return "assistant"
+		return string(agent.MsgAssistant)
 	}
 }
 
@@ -51,9 +51,9 @@ func (m *model) applyStreamUpdate(msg progressMsg) {
 	kind := componentTypeStr(msg.typ)
 	var c compoent.Component
 	switch kind {
-	case "assistant":
+	case string(agent.MsgAssistant):
 		c = compoent.NewAssistantMessage(msg.id, msg.content)
-	case "thinking":
+	case string(agent.MsgThinking):
 		c = compoent.NewThinkingMessage(msg.id, msg.content)
 	default:
 		return

@@ -262,7 +262,7 @@ func (m *model) handleKeyPress(msg tea.KeyPressMsg) []tea.Cmd {
 				m.store.EnsureSession(m.sessionID, m.agent.Model(), m.cwd)
 				m.store.AppendMessage(store.Message{
 					SessionID: m.sessionID,
-					MsgType:   "user",
+					MsgType:   string(agent.MsgUser),
 					Content:   input,
 				})
 			}

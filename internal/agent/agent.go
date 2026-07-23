@@ -30,6 +30,7 @@ const (
 	MsgToolResult      MsgType = "tool_result"      // tool execution result
 	MsgError           MsgType = "error"            // API call error (may be followed by retry)
 	MsgRetryWait       MsgType = "retry_wait"       // waiting before retrying after an error
+	MsgUser            MsgType = "user"
 )
 
 // CallbackMsg is passed to the progress callback during agent execution.
@@ -373,7 +374,7 @@ func (a *Agent) SystemPrompt() string {
 // HistoryMessage is a simplified representation of a persisted message,
 // used by ReconstructHistory to rebuild the OpenAI conversation format.
 type HistoryMessage struct {
-	MsgType    string // "user" | "assistant" | "thinking" | "tool_call" | "tool_result"
+	MsgType    string // uses MsgXxx constants (MsgUser, MsgAssistant, etc.)
 	Content    string
 	ToolCallID string
 	ToolName   string
@@ -394,11 +395,11 @@ func ReconstructHistory(msgs []HistoryMessage, systemPrompt string) []openai.Cha
 		m := msgs[i]
 
 		switch m.MsgType {
-		case "user":
+		case string(MsgUser):
 			history = append(history, openai.UserMessage(m.Content))
 			i++
 
-		case "assistant":
+		case string(MsgAssistant):
 			// assistant: normal path — host for subsequent tool_calls.
 			// tool_call: orphan path — no preceding assistant message
 			//   (happens when model calls tools without outputting text).
@@ -408,13 +409,13 @@ func ReconstructHistory(msgs []HistoryMessage, systemPrompt string) []openai.Cha
 			// If this is an assistant message, collect its content.
 			// If this is an orphan tool_call, content stays empty.
 			assistantContent := ""
-			if m.MsgType == "assistant" {
+			if m.MsgType == string(MsgAssistant) {
 				assistantContent = m.Content
 				i++ // consume assistant
 			}
 
 			// Collect tool_calls that immediately follow.
-			for i < len(msgs) && msgs[i].MsgType == "tool_call" {
+			for i < len(msgs) && msgs[i].MsgType == string(MsgToolCall) {
 				tc := msgs[i]
 				toolCalls = append(toolCalls, openai.ChatCompletionMessageToolCallParam{
 					ID:   tc.ToolCallID,
@@ -434,13 +435,13 @@ func ReconstructHistory(msgs []HistoryMessage, systemPrompt string) []openai.Cha
 			history = append(history, assistantMsg)
 
 			// Collect tool_results that follow.
-			for i < len(msgs) && msgs[i].MsgType == "tool_result" {
+			for i < len(msgs) && msgs[i].MsgType == string(MsgToolResult) {
 				tr := msgs[i]
 				history = append(history, openai.ToolMessage(tr.Content, tr.ToolCallID))
 				i++
 			}
 
-		case "thinking":
+		case string(MsgThinking):
 			i++
 
 		default:

@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
+	"github.com/lgzzzz/gocode/internal/agent"
 )
 
 // ---- types ----
@@ -25,7 +27,7 @@ type SessionInfo struct {
 type Message struct {
 	SessionID  string
 	Seq        int    // assigned automatically by AppendMessage
-	MsgType    string // "user" | "assistant" | "thinking" | "tool_call" | "tool_result"
+	MsgType    string // uses agent.MsgXxx constants (MsgUser, MsgAssistant, etc.)
 	Content    string
 	ToolName   string // only for tool_call
 	ToolArgs   string // only for tool_call
@@ -83,14 +85,14 @@ func (s *Store) ListSessions(limit int) ([]SessionInfo, error) {
 		`SELECT s.id, s.created_at, s.updated_at, s.model, s.cwd,
 		        COUNT(m.id) AS msg_count,
 		        (SELECT m2.content FROM messages m2
-		         WHERE m2.session_id = s.id AND m2.msg_type = 'user'
+		         WHERE m2.session_id = s.id AND m2.msg_type = ?
 		         ORDER BY m2.seq LIMIT 1) AS first_msg
 		 FROM sessions s
 		 LEFT JOIN messages m ON m.session_id = s.id
 		 GROUP BY s.id
 		 ORDER BY s.created_at DESC
 		 LIMIT ?`,
-		limit,
+		string(agent.MsgUser), limit,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("store: list sessions: %w", err)

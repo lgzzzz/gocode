@@ -1,5 +1,7 @@
 package compoent
 
+import "github.com/lgzzzz/gocode/internal/agent"
+
 // AssistantMessage renders an assistant chat message.
 type AssistantMessage struct {
 	id          string
@@ -16,7 +18,7 @@ func NewAssistantMessage(id, content string) *AssistantMessage {
 	return m
 }
 
-func (m *AssistantMessage) Type() string    { return "assistant" }
+func (m *AssistantMessage) Type() string    { return string(agent.MsgAssistant) }
 func (m *AssistantMessage) MsgID() string   { return m.id }
 func (m *AssistantMessage) Content() string { return m.content }
 

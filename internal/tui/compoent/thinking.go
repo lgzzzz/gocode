@@ -1,5 +1,7 @@
 package compoent
 
+import "github.com/lgzzzz/gocode/internal/agent"
+
 // ThinkingMessage renders an assistant's reasoning/thinking block.
 type ThinkingMessage struct {
 	id          string
@@ -16,7 +18,7 @@ func NewThinkingMessage(id, content string) *ThinkingMessage {
 	return m
 }
 
-func (m *ThinkingMessage) Type() string    { return "thinking" }
+func (m *ThinkingMessage) Type() string    { return string(agent.MsgThinking) }
 func (m *ThinkingMessage) MsgID() string   { return m.id }
 func (m *ThinkingMessage) Content() string { return m.content }
 

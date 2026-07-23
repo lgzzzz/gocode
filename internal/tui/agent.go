@@ -128,22 +128,22 @@ func (m *model) persistMessage(msg progressMsg) {
 	switch msg.typ {
 	// ---- complete thinking ----
 	case agent.MsgThinking:
-		sm.MsgType = "thinking"
+		sm.MsgType = string(agent.MsgThinking)
 		sm.Content = msg.content
 
 	// ---- complete assistant reply ----
 	case agent.MsgAssistant:
-		sm.MsgType = "assistant"
+		sm.MsgType = string(agent.MsgAssistant)
 		sm.Content = msg.content
 
 	// ---- tool call ----
 	case agent.MsgToolCall:
-		sm.MsgType = "tool_call"
+		sm.MsgType = string(agent.MsgToolCall)
 		sm.Content = msg.content
 
 	// ---- tool result ----
 	case agent.MsgToolResult:
-		sm.MsgType = "tool_result"
+		sm.MsgType = string(agent.MsgToolResult)
 		sm.Content = msg.content
 		sm.HasError = msg.toolErr != nil
 	default:

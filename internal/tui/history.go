@@ -92,18 +92,18 @@ func (m *model) LoadSession(sessionID string) {
 	for i := 0; i < len(msgs); i++ {
 		msg := msgs[i]
 		switch msg.MsgType {
-		case "user":
+		case string(agent.MsgUser):
 			m.history.Append(compoent.NewUserMessage(msg.Content))
-		case "assistant":
+		case string(agent.MsgAssistant):
 			if msg.Content != "" {
 				m.history.Append(compoent.NewAssistantMessage(msg.ToolCallID, msg.Content))
 			}
-		case "thinking":
+		case string(agent.MsgThinking):
 			m.history.Append(compoent.NewThinkingMessage(msg.ToolCallID, msg.Content))
-		case "tool_call":
+		case string(agent.MsgToolCall):
 			tm := compoent.NewToolMessage(msg.ToolCallID, msg.ToolName, msg.ToolArgs)
 			m.history.Append(tm)
-		case "tool_result":
+		case string(agent.MsgToolResult):
 			hasErr := msg.HasError
 			m.history.UpdateToolResult(msg.ToolCallID, msg.Content, hasErr)
 		}

@@ -8,7 +8,7 @@ package compoent
 
 // Component represents a renderable message component.
 type Component interface {
-	// Type returns the kind of component (e.g. "user", "thinking", "assistant").
+	// Type returns the kind of component (using agent.MsgXxx constants).
 	Type() string
 	// MsgID returns a unique identifier for this component, used for in-place updates.
 	// Empty string means the component is not updatable.
