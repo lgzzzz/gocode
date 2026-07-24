@@ -514,7 +514,6 @@ You help users by reading files, executing commands, editing code, and writing n
 			sb.WriteString(fmt.Sprintf("- %s\n", g))
 		}
 	}
-	addCommonGuideline("Work step by step: think → act → observe → decide")
 	addCommonGuideline("Be concise. When done, summarize what you accomplished.")
 	addCommonGuideline("Be concise in your responses")
 	addCommonGuideline("Show file paths clearly when working with files")

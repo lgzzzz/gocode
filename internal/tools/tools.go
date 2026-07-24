@@ -327,7 +327,7 @@ func AllTools() (map[string]ToolExecutor, []ToolDef) {
 	if runtime.GOOS == "windows" {
 		defs = append(defs, ToolDef{
 			Name:          "powershell",
-			Description:   "Execute a shell command on Windows systems. Runs via PowerShell (fallback cmd). Returns stdout and stderr combined.",
+			Description:   "Execute a shell command on Windows systems. Runs via PowerShell. Returns stdout and stderr combined.",
 			PromptSnippet: "Execute shell commands on Windows systems",
 			Parameters: map[string]any{
 				"type": "object",
@@ -341,7 +341,7 @@ func AllTools() (map[string]ToolExecutor, []ToolDef) {
 	} else {
 		defs = append(defs, ToolDef{
 			Name:          "bash",
-			Description:   "Execute a shell command on Linux/Unix systems. Runs via bash (fallback sh). Returns stdout and stderr combined.",
+			Description:   "Execute a shell command on Linux/Unix systems. Runs via bash. Returns stdout and stderr combined.",
 			PromptSnippet: "Execute shell commands on Linux/Unix systems",
 			Parameters: map[string]any{
 				"type": "object",
