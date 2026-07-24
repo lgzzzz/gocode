@@ -57,8 +57,6 @@ func NewModel(ag *agent.Agent, st *store.Store) tea.Model {
 	ta.CharLimit = -1          // 无字符限制
 	ta.SetVirtualCursor(false) // 使用真实光标（支持闪烁）
 	ta.DynamicHeight = true    // 动态高度（自动根据内容调整）
-	ta.MinHeight = 1           // 最小 1 行
-	ta.MaxHeight = 7           // 最大 7 行
 	styles := ta.Styles()
 	styles.Cursor.BlinkSpeed = 500 * time.Millisecond
 	ta.SetStyles(styles)
@@ -315,6 +313,10 @@ func (m *model) adjustLayout() {
 
 	paletteHeight := m.palette.Height()
 	editorHeight := m.editor.Height()
+	if editorHeight > 17 {
+		editorHeight = 17
+		m.editor.SetHeight(editorHeight)
+	}
 	totalBottom := editorHeight + paletteHeight + 1 // +1 for spacing
 	outputHeight := max(0, m.height-totalBottom)
 	m.output.SetHeight(outputHeight)
