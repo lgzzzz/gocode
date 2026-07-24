@@ -487,7 +487,6 @@ Available tools:
 
 Guidelines:
 {{Guidelines}}
-Be concise. When done, summarize what you accomplished.
 Be concise in your responses.
 Show file paths clearly when working with files.
 
