@@ -140,7 +140,7 @@ func (s *Store) Close() error {
 func NewSessionID() string {
 	b := make([]byte, 3)
 	rand.Read(b)
-	return time.Now().Format("2006-01-02-15-04-05") + "_" + hex.EncodeToString(b)
+	return time.Now().Format("2006-01-02-15-04-05") + "-" + hex.EncodeToString(b)
 }
 
 func (s *Store) EnsureSession(id, model, cwd string) error {
