@@ -2,7 +2,6 @@ package compoent
 
 import "github.com/lgzzzz/gocode/internal/agent"
 
-// AssistantMessage renders an assistant chat message.
 type AssistantMessage struct {
 	id          string
 	content     string
@@ -11,7 +10,6 @@ type AssistantMessage struct {
 	dirty       bool
 }
 
-// NewAssistantMessage creates a new assistant message component.
 func NewAssistantMessage(id, content string) *AssistantMessage {
 	m := &AssistantMessage{id: id}
 	m.SetContent(content)

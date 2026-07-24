@@ -2,7 +2,6 @@ package compoent
 
 import "github.com/lgzzzz/gocode/internal/agent"
 
-// ThinkingMessage renders an assistant's reasoning/thinking block.
 type ThinkingMessage struct {
 	id          string
 	content     string
@@ -11,7 +10,6 @@ type ThinkingMessage struct {
 	dirty       bool
 }
 
-// NewThinkingMessage creates a new thinking message component.
 func NewThinkingMessage(id, content string) *ThinkingMessage {
 	m := &ThinkingMessage{id: id}
 	m.SetContent(content)

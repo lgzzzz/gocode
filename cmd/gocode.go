@@ -21,7 +21,6 @@ func main() {
 	model := "deepseek-v4-pro"
 	baseURL := "https://api.deepseek.com"
 
-	// Initialize session store (failure is non-fatal).
 	st, err := store.Open("")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: could not open session store: %v\n", err)

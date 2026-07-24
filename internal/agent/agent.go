@@ -15,62 +15,53 @@ import (
 	"github.com/lgzzzz/gocode/internal/tools"
 )
 
-// Logger is the logging interface used by Agent.
-// Implementations must be safe for concurrent use.
 type Logger interface {
 	Printf(format string, v ...interface{})
 }
 
-// nopLogger is the default no-op logger.
 type nopLogger struct{}
 
 func (nopLogger) Printf(string, ...interface{}) {}
 
-// ---- callback message types ----
 
-// MsgType identifies the kind of callback message.
 type MsgType string
 
 const (
-	MsgThinkingStream  MsgType = "thinking_stream"  // streaming thinking/reasoning content (not persisted)
-	MsgAssistantStream MsgType = "assistant_stream" // streaming assistant content (not persisted)
-	MsgThinking        MsgType = "thinking"         // complete thinking/reasoning (persisted)
-	MsgAssistant       MsgType = "assistant"        // complete assistant reply (persisted)
+	MsgThinkingStream  MsgType = "thinking_stream"
+	MsgAssistantStream MsgType = "assistant_stream"
+	MsgThinking        MsgType = "thinking"
+	MsgAssistant       MsgType = "assistant"
 
-	MsgToolCall   MsgType = "tool_call"   // tool call issued
-	MsgToolResult MsgType = "tool_result" // tool execution result
+	MsgToolCall   MsgType = "tool_call"
+	MsgToolResult MsgType = "tool_result"
 
-	MsgError     MsgType = "error"      // API call error (may be followed by retry)
-	MsgRetryWait MsgType = "retry_wait" // waiting before retrying after an error
+	MsgError     MsgType = "error"
+	MsgRetryWait MsgType = "retry_wait"
 
 	MsgUser MsgType = "user"
 )
 
-// CallbackMsg is passed to the progress callback during agent execution.
 type CallbackMsg struct {
-	ID         string  // message ID
-	Type       MsgType // event type
+	ID         string
+	Type       MsgType
 	Content    string
-	ToolCallID string // tool call ID (set for tool_call and tool_result)
-	ToolName   string // tool name (set for tool_call)
-	ToolArgs   string // tool arguments JSON (set for tool_call)
-	ToolErr    error  // tool execution error (set for tool_result)
+	ToolCallID string
+	ToolName   string
+	ToolArgs   string
+	ToolErr    error
 }
 
-// Agent implements a ReAct-style loop using OpenAI-compatible function calling.
 type Agent struct {
 	client          *goopenai.Client
 	model           string
 	oaiTools        []goopenai.Tool
-	toolDefs        []tools.ToolDef // tool definitions for system prompt generation
+	toolDefs        []tools.ToolDef
 	toolMap         map[string]tools.ToolExecutor
 	cwd             string
-	contextMessages []goopenai.ChatCompletionMessage // conversation contextMessages
-	logger          Logger                           // optional logger (defaults to no-op)
+	contextMessages []goopenai.ChatCompletionMessage
+	logger          Logger
 }
 
-// New creates a new Agent with the given API key, model, and base URL.
-// If baseURL is empty, defaults to DeepSeek API.
 func New(apiKey, model, baseURL string) *Agent {
 	if baseURL == "" {
 		baseURL = "https://api.deepseek.com"
@@ -107,21 +98,13 @@ func New(apiKey, model, baseURL string) *Agent {
 	}
 }
 
-// Run executes the ReAct loop with streaming. The callback receives structured
-// CallbackMsg values as events occur.
-//
-// It maintains conversation history across calls so the LLM can refer to
-// previous messages. reasoning_content is round-tripped: returned from the
-// API and included back in assistant messages on subsequent requests.
 func (a *Agent) Run(ctx context.Context, userMessage string, cb func(CallbackMsg)) {
-	// Initialize history with system prompt on first run
 	if len(a.contextMessages) == 0 {
 		a.contextMessages = []goopenai.ChatCompletionMessage{
 			sysMsg(a.systemPrompt()),
 		}
 	}
 
-	// Append the new user message to history
 	a.contextMessages = append(a.contextMessages, userMsg(userMessage))
 
 	messages := a.contextMessages
@@ -131,9 +114,7 @@ func (a *Agent) Run(ctx context.Context, userMessage string, cb func(CallbackMsg
 		if err != nil {
 			return
 		}
-		// If the model wants to call tools
 		if len(toolCalls) > 0 {
-			// Build the assistant message that requested tool calls
 			assistantMsg := asstMsg(fullContent)
 			assistantMsg.ReasoningContent = fullReasoning
 			assistantMsg.ToolCalls = toolCalls
@@ -163,8 +144,6 @@ func (a *Agent) Run(ctx context.Context, userMessage string, cb func(CallbackMsg
 						toolErr = err
 					} else {
 						result = res
-						// Shell tools return nil error even on non-zero exit;
-						// detect via result prefix.
 						if (tc.Function.Name == "bash" || tc.Function.Name == "powershell") &&
 							(strings.HasPrefix(result, "exit ") || strings.HasPrefix(result, "(timed out")) {
 							toolErr = fmt.Errorf("%s", strings.SplitN(result, "\n", 2)[0])
@@ -185,7 +164,6 @@ func (a *Agent) Run(ctx context.Context, userMessage string, cb func(CallbackMsg
 			continue
 		}
 
-		// Final text response — append to history (with reasoning_content)
 		assistantMsg := asstMsg(fullContent)
 		assistantMsg.ReasoningContent = fullReasoning
 		messages = append(messages, assistantMsg)
@@ -194,11 +172,6 @@ func (a *Agent) Run(ctx context.Context, userMessage string, cb func(CallbackMsg
 	}
 }
 
-// streamOne runs a single streaming chat completion and returns the accumulated
-// content, reasoning, and any tool calls.
-//
-// It retries up to maxRetries times on transient errors, with exponential
-// backoff between attempts.
 func (a *Agent) streamOne(
 	ctx context.Context,
 	messages []goopenai.ChatCompletionMessage,
@@ -213,19 +186,16 @@ func (a *Agent) streamOne(
 			return content, reasoning, toolCalls, nil
 		}
 
-		// Don't retry if context is cancelled
 		if ctx.Err() != nil {
 			cb(CallbackMsg{Type: MsgError, Content: fmt.Sprintf("请求已取消: %v", ctx.Err())})
 			return "", "", nil, fmt.Errorf("context cancelled: %w", ctx.Err())
 		}
 
-		// Last attempt failed — return the error
 		if attempt == maxRetries {
 			cb(CallbackMsg{Type: MsgError, Content: fmt.Sprintf("API 调用失败（已重试 %d 次）: %v", maxRetries, err)})
 			return "", "", nil, fmt.Errorf("API call failed after %d retries: %w", maxRetries, err)
 		}
 
-		// Report the error and notify that we'll retry
 		cb(CallbackMsg{Type: MsgError, Content: fmt.Sprintf("API 调用出错: %v", err)})
 		cb(CallbackMsg{Type: MsgRetryWait, Content: fmt.Sprintf("将在 %.0f 秒后重试（第 %d/%d 次）...", baseDelay.Seconds(), attempt+1, maxRetries)})
 
@@ -239,7 +209,6 @@ func (a *Agent) streamOne(
 	return "", "", nil, fmt.Errorf("unreachable")
 }
 
-// streamOneAttempt performs a single streaming chat completion attempt.
 func (a *Agent) streamOneAttempt(
 	ctx context.Context,
 	messages []goopenai.ChatCompletionMessage,
@@ -262,7 +231,7 @@ func (a *Agent) streamOneAttempt(
 	var (
 		fullContent   strings.Builder
 		fullReasoning strings.Builder
-		tcMap         = make(map[int]*toolCallAccum) // index -> accumulator
+		tcMap         = make(map[int]*toolCallAccum)
 	)
 	fullContentId := uuid.NewString()
 	fullReasoningId := uuid.NewString()
@@ -280,19 +249,16 @@ func (a *Agent) streamOneAttempt(
 		}
 		delta := resp.Choices[0].Delta
 
-		// Handle reasoning_content (DeepSeek)
 		if delta.ReasoningContent != "" {
 			fullReasoning.WriteString(delta.ReasoningContent)
 			cb(CallbackMsg{Type: MsgThinkingStream, ID: fullReasoningId, Content: fullReasoning.String()})
 		}
 
-		// Handle regular content
 		if delta.Content != "" {
 			fullContent.WriteString(delta.Content)
 			cb(CallbackMsg{Type: MsgAssistantStream, ID: fullContentId, Content: fullContent.String()})
 		}
 
-		// Handle tool calls (accumulate by index)
 		for _, tc := range delta.ToolCalls {
 			idx := 0
 			if tc.Index != nil {
@@ -316,7 +282,6 @@ func (a *Agent) streamOneAttempt(
 		}
 	}
 
-	// Collect accumulated tool calls in index order
 	for i := 0; i < len(tcMap); i++ {
 		if acc, ok := tcMap[i]; ok {
 			toolCalls = append(toolCalls, goopenai.ToolCall{
@@ -338,7 +303,6 @@ func (a *Agent) streamOneAttempt(
 	return fullContent.String(), fullReasoning.String(), toolCalls, nil
 }
 
-// toolCallAccum accumulates a tool call from streaming deltas.
 type toolCallAccum struct {
 	ID        string
 	Type      string
@@ -346,10 +310,8 @@ type toolCallAccum struct {
 	Arguments string
 }
 
-// Model returns the model name used by this agent.
 func (a *Agent) Model() string { return a.model }
 
-// SetLogger sets the logger used by the agent. Passing nil resets to no-op.
 func (a *Agent) SetLogger(l Logger) {
 	if l == nil {
 		l = nopLogger{}
@@ -357,41 +319,30 @@ func (a *Agent) SetLogger(l Logger) {
 	a.logger = l
 }
 
-// ClearContextMessage resets the conversation history for a fresh session.
 func (a *Agent) ClearContextMessage() {
 	a.contextMessages = nil
 }
 
-// SetContextMessage replaces the conversation history with the given messages.
 func (a *Agent) SetContextMessage(contextMessages []goopenai.ChatCompletionMessage) {
 	a.contextMessages = contextMessages
 }
 
-// SystemPrompt returns the system prompt string.
 func (a *Agent) SystemPrompt() string {
 	return a.systemPrompt()
 }
 
-// ---- history reconstruction ----
 
-// HistoryMessage is a simplified representation of a persisted message,
-// used by ReconstructHistory to rebuild the OpenAI conversation format.
 type HistoryMessage struct {
-	MsgType    string // uses MsgXxx constants
+	MsgType    string
 	Content    string
 	ToolCallID string
 	ToolName   string
 	ToolArgs   string
 }
 
-// ReconstructHistory rebuilds an OpenAI-compatible conversation history
-// from persisted messages. thinking messages are merged into the following
-// assistant message via ReasoningContent, and tool_call messages are grouped
-// into the preceding assistant message as ToolCalls.
 func ReconstructHistory(msgs []HistoryMessage, systemPrompt string) []goopenai.ChatCompletionMessage {
 	var result []goopenai.ChatCompletionMessage
 
-	// Always start with the system prompt.
 	result = append(result, goopenai.ChatCompletionMessage{
 		Role:    goopenai.ChatMessageRoleSystem,
 		Content: systemPrompt,
@@ -472,13 +423,6 @@ func ReconstructHistory(msgs []HistoryMessage, systemPrompt string) []goopenai.C
 	return result
 }
 
-// systemPromptTemplate defines the system prompt structure.
-// Placeholders are replaced at runtime:
-//
-//	{{.ToolsList}}   – available tools with descriptions
-//	{{.Guidelines}}  – tool-specific and common usage guidelines
-//	{{.CWD}}         – current working directory
-//	{{.OS}}          – operating system name
 const systemPromptTemplate = `You are an expert coding assistant called GoCode.
 You help users by reading files, executing commands, editing code, and writing new files.
 
@@ -493,8 +437,6 @@ Show file paths clearly when working with files.
 Current working directory: {{CWD}}
 Current environment: {{OS}}`
 
-// systemPrompt builds the system prompt by rendering the template with
-// tool descriptions, guidelines, and environment info.
 func (a *Agent) systemPrompt() string {
 	prompt := systemPromptTemplate
 
@@ -506,11 +448,10 @@ func (a *Agent) systemPrompt() string {
 	return prompt
 }
 
-// buildToolsPrompt returns the formatted list of available tools.
 func (a *Agent) buildToolsPrompt() string {
 	var sb strings.Builder
 	for _, t := range a.oaiTools {
-		snippet := t.Function.Description // fallback to full description
+		snippet := t.Function.Description
 		for _, d := range a.toolDefs {
 			if d.Name == t.Function.Name && d.PromptSnippet != "" {
 				snippet = d.PromptSnippet
@@ -523,7 +464,6 @@ func (a *Agent) buildToolsPrompt() string {
 	return strings.TrimSpace(sb.String())
 }
 
-// buildGuidelinesPrompt returns the formatted, deduplicated list of guidelines.
 func (a *Agent) buildGuidelinesPrompt() string {
 	var sb strings.Builder
 	seen := make(map[string]bool)
@@ -545,7 +485,6 @@ func (a *Agent) buildGuidelinesPrompt() string {
 	return strings.TrimSpace(sb.String())
 }
 
-// osName returns a human-readable OS name.
 func osName() string {
 	switch runtime.GOOS {
 	case "windows":
@@ -559,7 +498,6 @@ func osName() string {
 	}
 }
 
-// ---- message constructors ----
 
 func sysMsg(content string) goopenai.ChatCompletionMessage {
 	return goopenai.ChatCompletionMessage{Role: goopenai.ChatMessageRoleSystem, Content: content}

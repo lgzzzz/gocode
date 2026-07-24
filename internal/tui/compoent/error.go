@@ -2,7 +2,6 @@ package compoent
 
 import "github.com/lgzzzz/gocode/internal/agent"
 
-// ErrorMessage renders an error message.
 type ErrorMessage struct {
 	content     string
 	renderCache string
@@ -10,7 +9,6 @@ type ErrorMessage struct {
 	dirty       bool
 }
 
-// NewErrorMessage creates a new error message component.
 func NewErrorMessage(content string) *ErrorMessage {
 	m := &ErrorMessage{}
 	m.SetContent(content)

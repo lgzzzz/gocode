@@ -11,9 +11,7 @@ import (
 	"github.com/lgzzzz/gocode/internal/tui/compoent"
 )
 
-// ---- agent actions ----
 
-// StartAgent launches the agent with the given input string.
 func (m *model) StartAgent(input string) tea.Cmd {
 	m.running = true
 
@@ -49,12 +47,9 @@ func (m *model) StartAgent(input string) tea.Cmd {
 	return waitCmd(ch)
 }
 
-// ---- ModelAccess interface implementation ----
 
-// Running returns whether the agent is currently executing.
 func (m *model) Running() bool { return m.running }
 
-// CancelAgent cancels the running agent context.
 func (m *model) CancelAgent() { m.cancelAgent() }
 
 func (m *model) cancelAgent() {
@@ -64,9 +59,7 @@ func (m *model) cancelAgent() {
 	}
 }
 
-// ---- progress handling ----
 
-// handleProgressMsg processes agent callback messages.
 func (m *model) handleProgressMsg(msg progressMsg) []tea.Cmd {
 	if msg.err != nil {
 		m.history.Append(compoent.NewErrorMessage(msg.err.Error()))
@@ -100,8 +93,6 @@ func (m *model) handleProgressMsg(msg progressMsg) []tea.Cmd {
 	return nil
 }
 
-// persistMessage persists only "complete" message types to the store.
-// Streaming messages (thinking_stream, assistant_stream) are skipped.
 func (m *model) persistMessage(msg progressMsg) {
 	if m.store == nil {
 		return

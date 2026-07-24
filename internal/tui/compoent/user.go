@@ -2,7 +2,6 @@ package compoent
 
 import "github.com/lgzzzz/gocode/internal/agent"
 
-// UserMessage renders a user chat message.
 type UserMessage struct {
 	content     string
 	renderCache string
@@ -10,7 +9,6 @@ type UserMessage struct {
 	dirty       bool
 }
 
-// NewUserMessage creates a new user message component.
 func NewUserMessage(content string) *UserMessage {
 	m := &UserMessage{}
 	m.SetContent(content)

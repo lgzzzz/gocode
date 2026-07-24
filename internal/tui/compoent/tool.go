@@ -6,7 +6,6 @@ import (
 	"strings"
 )
 
-// ---- Tool states ----
 
 type ToolState int
 
@@ -16,9 +15,6 @@ const (
 	ToolStateError
 )
 
-// ToolMessage merges a tool call and its result into a single block.
-// Use NewToolMessage to create one in "executing" state, then call
-// SetResult when the tool result arrives to transition to success/error.
 type ToolMessage struct {
 	id          string
 	name        string
@@ -39,9 +35,6 @@ func NewToolMessage(id, name, args string) *ToolMessage {
 	}
 }
 
-// SetResult updates the tool message with the execution result.
-// It falls back to pattern-matching on the result string to detect errors,
-// but callers should prefer using SetError() via CallbackMsg.Err for accuracy.
 func (m *ToolMessage) SetResult(result string) {
 	if m.result == result && m.state != ToolStateExecuting {
 		return
@@ -57,8 +50,6 @@ func (m *ToolMessage) SetResult(result string) {
 	m.invalidateCache()
 }
 
-// SetError explicitly marks the tool as having errored.
-// Call this after SetResult when CallbackMsg.Err is non-nil.
 func (m *ToolMessage) SetError() {
 	if m.state == ToolStateError {
 		return
@@ -99,11 +90,9 @@ func (m *ToolMessage) Render(width int) string {
 
 const maxToolResultLines = 6
 
-// renderLocked builds the rendered string for the given width.
 func (m *ToolMessage) renderLocked(width int) string {
 	firstLine := m.formatFirstLine()
 
-	// Build result lines (if any).
 	var body string
 	if m.state != ToolStateExecuting && m.result != "" {
 		lines := strings.Split(m.result, "\n")
@@ -115,7 +104,6 @@ func (m *ToolMessage) renderLocked(width int) string {
 		body = "\n" + strings.Join(lines, "\n")
 	}
 
-	// Determine style based on tool state.
 	style := toolStyle
 	boldStyle := toolBoldStyle
 	if m.state == ToolStateError {
@@ -123,7 +111,6 @@ func (m *ToolMessage) renderLocked(width int) string {
 		boldStyle = toolErrorBoldStyle
 	}
 
-	// Render first line bold, body normal.
 	rendered := strings.TrimSpace(boldStyle.Width(width - 1).Render(firstLine))
 	if body != "" {
 		rendered += "\n" + strings.TrimSpace(style.Width(width - 1).Render(strings.TrimSpace(body)))
@@ -131,7 +118,6 @@ func (m *ToolMessage) renderLocked(width int) string {
 	return rendered
 }
 
-// formatFirstLine builds the bold first line based on tool name and args.
 func (m *ToolMessage) formatFirstLine() string {
 	switch m.name {
 	case "edit":
@@ -151,7 +137,6 @@ func (m *ToolMessage) formatFirstLine() string {
 	}
 }
 
-// parseArgPath extracts the "path" field from a JSON args string.
 func parseArgPath(argsJSON string) string {
 	var args struct {
 		Path string `json:"path"`
@@ -162,7 +147,6 @@ func parseArgPath(argsJSON string) string {
 	return truncateStr(args.Path, 200)
 }
 
-// parseArgCommand extracts the "command" field from a JSON args string.
 func parseArgCommand(argsJSON string) string {
 	var args struct {
 		Command string `json:"command"`

@@ -5,18 +5,17 @@ import (
 	"github.com/lgzzzz/gocode/internal/agent"
 )
 
-// ---- progress message ----
 
 type progressMsg struct {
-	ID         string        // message ID
-	Type       agent.MsgType // event type
+	ID         string
+	Type       agent.MsgType
 	Content    string
-	ToolCallID string // tool call ID (set for tool_call and tool_result)
-	ToolName   string // tool name (set for tool_call)
-	ToolArgs   string // tool arguments JSON (set for tool_call)
-	ToolErr    error  // tool execution error (set for tool_result)
+	ToolCallID string
+	ToolName   string
+	ToolArgs   string
+	ToolErr    error
 	done       bool
-	err        error // fatal / panic error
+	err        error
 }
 
 func waitCmd(ch chan progressMsg) tea.Cmd {

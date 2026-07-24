@@ -10,22 +10,19 @@ import (
 	"time"
 )
 
-// ToolExecutor knows how to execute a tool given JSON arguments.
 type ToolExecutor interface {
 	Execute(argsJSON string) (string, error)
 	Name() string
 }
 
-// ToolDef describes a tool for OpenAI function calling and system prompt generation.
 type ToolDef struct {
 	Name             string
 	Description      string
 	Parameters       any
-	PromptSnippet    string   // one-line description for the system prompt tool list
-	PromptGuidelines []string // guidelines added to system prompt when tool is available
+	PromptSnippet    string
+	PromptGuidelines []string
 }
 
-// ---- read tool ----
 
 type ReadTool struct{}
 
@@ -73,7 +70,6 @@ func (t *ReadTool) Execute(argsJSON string) (string, error) {
 	return result, nil
 }
 
-// ---- write tool ----
 
 type WriteTool struct{}
 
@@ -101,7 +97,6 @@ func (t *WriteTool) Execute(argsJSON string) (string, error) {
 	return fmt.Sprintf("Wrote %d bytes to %s", len(args.Content), args.Path), nil
 }
 
-// ---- edit tool ----
 
 type EditTool struct{}
 
@@ -152,7 +147,6 @@ func (t *EditTool) Execute(argsJSON string) (string, error) {
 	return fmt.Sprintf("Edited %s: replaced 1 occurrence", args.Path), nil
 }
 
-// ---- bash tool (Linux/Unix) ----
 
 type BashTool struct{}
 
@@ -174,7 +168,6 @@ func (t *BashTool) Execute(argsJSON string) (string, error) {
 	return runShellCommand(args.Command, args.Timeout, "bash", buildLinuxShellCmd)
 }
 
-// buildLinuxShellCmd returns a shell command using bash (fallback sh).
 func buildLinuxShellCmd(command string) *exec.Cmd {
 	if _, err := exec.LookPath("bash"); err == nil {
 		return exec.Command("bash", "-c", command)
@@ -182,7 +175,6 @@ func buildLinuxShellCmd(command string) *exec.Cmd {
 	return exec.Command("sh", "-c", command)
 }
 
-// ---- powershell tool (Windows) ----
 
 type PowershellTool struct{}
 
@@ -204,20 +196,14 @@ func (t *PowershellTool) Execute(argsJSON string) (string, error) {
 	return runShellCommand(args.Command, args.Timeout, "powershell", buildWindowsShellCmd)
 }
 
-// buildWindowsShellCmd returns a shell command using PowerShell (fallback cmd).
-// The command is wrapped to ensure output encoding is UTF-8, so Chinese and other
-// Unicode characters are preserved correctly.
 func buildWindowsShellCmd(command string) *exec.Cmd {
 	if _, err := exec.LookPath("powershell.exe"); err == nil {
-		// Prepend UTF-8 output encoding setup before the user's command.
-		// This ensures that tools like echo/Write-Output emit UTF-8 text.
 		wrappedCmd := "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; " + command
 		return exec.Command("powershell", "-NoProfile", "-NonInteractive", "-Command", wrappedCmd)
 	}
 	return exec.Command("cmd", "/c", command)
 }
 
-// runShellCommand executes a shell command with a timeout and returns combined stdout/stderr.
 func runShellCommand(command string, timeoutSec int, toolName string, buildCmd func(string) *exec.Cmd) (string, error) {
 	timeout := 30
 	if timeoutSec > 0 {
@@ -252,7 +238,6 @@ func runShellCommand(command string, timeoutSec int, toolName string, buildCmd f
 	}
 }
 
-// ---- helpers ----
 
 func dirOf(path string) string {
 	if idx := strings.LastIndex(path, "/"); idx >= 0 {
@@ -261,10 +246,6 @@ func dirOf(path string) string {
 	return "."
 }
 
-// AllTools returns a map of tool executors and their OpenAI function definitions.
-// Shell tools are selected based on the operating system:
-//   - Windows: powershell (with cmd fallback)
-//   - Linux/macOS/Unix: bash (with sh fallback)
 func AllTools() (map[string]ToolExecutor, []ToolDef) {
 	tools := map[string]ToolExecutor{
 		"read":  &ReadTool{},
@@ -272,7 +253,6 @@ func AllTools() (map[string]ToolExecutor, []ToolDef) {
 		"edit":  &EditTool{},
 	}
 
-	// Select the appropriate shell tool based on OS
 	if runtime.GOOS == "windows" {
 		tools["powershell"] = &PowershellTool{}
 	} else {

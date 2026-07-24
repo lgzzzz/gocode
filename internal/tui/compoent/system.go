@@ -1,6 +1,5 @@
 package compoent
 
-// SystemMessage renders a system/welcome banner.
 type SystemMessage struct {
 	content     string
 	renderCache string
@@ -8,7 +7,6 @@ type SystemMessage struct {
 	dirty       bool
 }
 
-// NewSystemMessage creates a new system message component.
 func NewSystemMessage(content string) *SystemMessage {
 	m := &SystemMessage{}
 	m.SetContent(content)

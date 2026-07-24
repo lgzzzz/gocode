@@ -12,7 +12,6 @@ import (
 	"github.com/google/uuid"
 )
 
-// Session and Message definitions — DO NOT MODIFY (required by spec).
 
 type Session struct {
 	SessionID string
@@ -20,10 +19,9 @@ type Session struct {
 
 	Model    string
 	CWD      string
-	FirstMsg string // first user message, for list display
+	FirstMsg string
 }
 
-// Message represents a single persisted message.
 type Message struct {
 	SessionID string
 	CreatedAt string
@@ -31,39 +29,29 @@ type Message struct {
 	MsgType string
 	MsgID   string
 
-	Content string // shared by tool_result, thinking message, assistant message, user message
+	Content string
 
-	ToolName   string // only for tool_call
-	ToolArgs   string // only for tool_call
-	ToolCallID string // shared by tool_call and tool_result
+	ToolName   string
+	ToolArgs   string
+	ToolCallID string
 
-	HasError bool // tool_result or error
+	HasError bool
 }
 
-// ---- file format ----
-//
-// Each session is stored in a single file under the store directory.
-//   - Line 1:   JSON-encoded Session (compact, no newlines in values)
-//   - Line 2..N: JSON-encoded Message, one per line
-//
-// File name: <SessionID>.session
 
-// ---- Store ----
 
 type Store struct {
 	mu       sync.Mutex
 	dir      string
-	sessions map[string]*Session  // SessionID -> Session
-	messages map[string][]Message // SessionID -> ordered messages
-	writers  map[string]*os.File  // SessionID -> open file handle (append mode)
+	sessions map[string]*Session
+	messages map[string][]Message
+	writers  map[string]*os.File
 }
 
-// sessionFileName returns the file name for a given session ID.
 func sessionFileName(id string) string {
 	return id + ".session"
 }
 
-// defaultDir returns the default store directory (~/.gocode/sessions).
 func defaultDir() string {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -73,8 +61,6 @@ func defaultDir() string {
 	return dir
 }
 
-// Open opens (or creates) the session store at the given directory.
-// If path is empty, uses ~/.gocode/sessions.
 func Open(path string) (*Store, error) {
 	if path == "" {
 		path = defaultDir()
@@ -91,10 +77,9 @@ func Open(path string) (*Store, error) {
 		writers:  make(map[string]*os.File),
 	}
 
-	// Scan existing session files into memory.
 	entries, err := os.ReadDir(path)
 	if err != nil {
-		return s, nil // empty store
+		return s, nil
 	}
 
 	for _, entry := range entries {
@@ -110,7 +95,6 @@ func Open(path string) (*Store, error) {
 	return s, nil
 }
 
-// loadSessionFile reads a single .session file into memory.
 func (s *Store) loadSessionFile(filePath string) {
 	f, err := os.Open(filePath)
 	if err != nil {
@@ -119,7 +103,6 @@ func (s *Store) loadSessionFile(filePath string) {
 	defer f.Close()
 
 	scanner := bufio.NewScanner(f)
-	// Increase buffer for long lines (tool output may be large).
 	scanner.Buffer(make([]byte, 0, 256*1024), 16*1024*1024)
 
 	lineNum := 0
@@ -129,7 +112,7 @@ func (s *Store) loadSessionFile(filePath string) {
 		if lineNum == 0 {
 			var sess Session
 			if err := json.Unmarshal(line, &sess); err != nil {
-				return // corrupted file, skip
+				return
 			}
 			s.sessions[sess.SessionID] = &sess
 			sessionID = sess.SessionID
@@ -146,7 +129,6 @@ func (s *Store) loadSessionFile(filePath string) {
 	})
 }
 
-// Close closes all open file handles. Call on program exit (Ctrl+C).
 func (s *Store) Close() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -158,12 +140,10 @@ func (s *Store) Close() error {
 	return nil
 }
 
-// NewSessionID generates a new unique session identifier.
 func NewSessionID() string {
 	return uuid.New().String()
 }
 
-// EnsureSession creates a session record if it doesn't already exist.
 func (s *Store) EnsureSession(id, model, cwd string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -182,7 +162,6 @@ func (s *Store) EnsureSession(id, model, cwd string) error {
 	return s.writeSessionFile(id)
 }
 
-// ListSessions returns sessions ordered by CreatedAt descending.
 func (s *Store) ListSessions(limit int) ([]Session, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -200,7 +179,6 @@ func (s *Store) ListSessions(limit int) ([]Session, error) {
 	return list, nil
 }
 
-// AppendMessage appends a message to the session and persists it to disk.
 func (s *Store) AppendMessage(msg Message) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -209,7 +187,6 @@ func (s *Store) AppendMessage(msg Message) error {
 
 	s.messages[msg.SessionID] = append(s.messages[msg.SessionID], msg)
 
-	// Update FirstMsg on the first user message of this session.
 	needRewrite := false
 	if sess, ok := s.sessions[msg.SessionID]; ok {
 		if sess.FirstMsg == "" && msg.MsgType == "user" {
@@ -218,17 +195,13 @@ func (s *Store) AppendMessage(msg Message) error {
 		}
 	}
 
-	// If FirstMsg changed (first user message), rewrite the entire file
-	// so the session header on line 1 stays correct.
 	if needRewrite {
 		return s.writeSessionFile(msg.SessionID)
 	}
 
-	// Fast path: append a single line using the open file handle.
 	return s.appendLine(msg.SessionID, msg)
 }
 
-// GetSessionMessages returns all persisted messages for a session.
 func (s *Store) GetSessionMessages(sessionID string) ([]Message, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -242,10 +215,7 @@ func (s *Store) GetSessionMessages(sessionID string) ([]Message, error) {
 	return out, nil
 }
 
-// ---- internal helpers (caller must hold s.mu) ----
 
-// getOrOpenWriter returns the cached file handle for the session,
-// or opens one in append mode if none is cached yet.
 func (s *Store) getOrOpenWriter(id string) (*os.File, error) {
 	if w, ok := s.writers[id]; ok {
 		return w, nil
@@ -259,11 +229,7 @@ func (s *Store) getOrOpenWriter(id string) (*os.File, error) {
 	return w, nil
 }
 
-// writeSessionFile writes (or rewrites) the full session file.
-// Closes the previous handle (if any), creates a fresh file, writes
-// all data, then opens a new handle for future appends.
 func (s *Store) writeSessionFile(id string) error {
-	// Close and remove old cached handle.
 	if old, ok := s.writers[id]; ok {
 		old.Close()
 		delete(s.writers, id)
@@ -280,7 +246,6 @@ func (s *Store) writeSessionFile(id string) error {
 		return err
 	}
 
-	// Line 1: Session JSON (compact, single line).
 	sessJSON, err := json.Marshal(sess)
 	if err != nil {
 		f.Close()
@@ -289,7 +254,6 @@ func (s *Store) writeSessionFile(id string) error {
 	f.Write(sessJSON)
 	f.Write([]byte{'\n'})
 
-	// Remaining lines: each message as a single JSON line.
 	for _, msg := range s.messages[id] {
 		msgJSON, err := json.Marshal(msg)
 		if err != nil {
@@ -300,10 +264,8 @@ func (s *Store) writeSessionFile(id string) error {
 		f.Write([]byte{'\n'})
 	}
 
-	// Keep the file open for future appends; swap the handle.
 	f.Close()
 
-	// Reopen in append mode and cache.
 	w, err := os.OpenFile(filePath, os.O_APPEND|os.O_WRONLY, 0600)
 	if err != nil {
 		return err
@@ -312,8 +274,6 @@ func (s *Store) writeSessionFile(id string) error {
 	return nil
 }
 
-// appendLine appends a single message JSON line using the cached
-// file handle. Opens the handle lazily if needed.
 func (s *Store) appendLine(sessionID string, msg Message) error {
 	w, err := s.getOrOpenWriter(sessionID)
 	if err != nil {

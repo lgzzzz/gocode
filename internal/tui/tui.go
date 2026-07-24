@@ -22,29 +22,27 @@ import (
 	"github.com/lgzzzz/gocode/internal/tui/sessionbrowser"
 )
 
-// ---- model ----
 
 type model struct {
 	editor  textarea.Model
 	output  viewport.Model
 	agent   *agent.Agent
 	history history.History
-	palette *palette.Palette // command palette popup
+	palette *palette.Palette
 
 	width  int
 	height int
 
 	running bool
-	cancel  context.CancelFunc // cancels the running agent context
+	cancel  context.CancelFunc
 	ch      chan progressMsg
 
-	store          *store.Store            // session persistence (nil if unavailable)
-	sessionID      string                  // current session UUID
-	cwd            string                  // current working directory when session was created
-	sessionBrowser *sessionbrowser.Browser // session list browser (use Active() to check)
+	store          *store.Store
+	sessionID      string
+	cwd            string
+	sessionBrowser *sessionbrowser.Browser
 }
 
-// NewModel creates a new TUI model.
 func NewModel(ag *agent.Agent, st *store.Store) tea.Model {
 	width, height, err := term.GetSize(os.Stdout.Fd())
 	if err != nil {
@@ -62,12 +60,10 @@ func NewModel(ag *agent.Agent, st *store.Store) tea.Model {
 	ta.SetStyles(styles)
 	ta.Focus() // 初始获得焦点
 
-	// Initialize command registry and palette.
 	reg := command.NewRegistry()
 	reg.Register(&command.NewCommand{})
 	reg.Register(&command.SessionsCommand{})
 
-	// Generate a session ID (DB row is created lazily on first message).
 	cwd, _ := os.Getwd()
 	sessionID := store.NewSessionID()
 
@@ -123,7 +119,6 @@ func (m model) View() tea.View {
 		return v
 	}
 
-	// Session browser takes over the entire screen when active.
 	if m.sessionBrowser.Active() {
 		v.SetContent(m.sessionBrowser.View())
 		return v
@@ -162,13 +157,10 @@ func (m model) View() tea.View {
 	return v
 }
 
-// ---- keyboard handling ----
 
-// handleKeyPress processes keyboard events.
 func (m *model) handleKeyPress(msg tea.KeyPressMsg) []tea.Cmd {
 	var cmds []tea.Cmd
 
-	// ---- session browser mode ----
 	if m.sessionBrowser.Active() {
 		switch msg.String() {
 		case "esc", "ctrl+c":
@@ -190,7 +182,6 @@ func (m *model) handleKeyPress(msg tea.KeyPressMsg) []tea.Cmd {
 
 	k := msg.Key()
 
-	// ---- command mode: intercept special keys ----
 	if m.palette.Active() {
 		result := m.palette.HandleKey(msg.String())
 
@@ -213,23 +204,17 @@ func (m *model) handleKeyPress(msg tea.KeyPressMsg) []tea.Cmd {
 			return nil
 		}
 
-		// For up/down (already handled inside HandleKey) and unrecognized
-		// keys, don't forward to the editor — navigation keys are consumed.
 		if msg.String() == "up" || msg.String() == "down" {
 			return nil
 		}
 
-		// For other keys (letters, backspace, etc.), fall through and let the
-		// editor process them normally.
 	}
 
-	// PageUp/PageDown scroll the output viewport.
 	if k.Code == tea.KeyPgUp || k.Code == tea.KeyPgDown {
 		cmds = append(cmds, m.updateOutput(msg)...)
 		return cmds
 	}
 
-	// Always forward to editor (except for special keys that we handle first).
 	switch {
 	case k.Code == tea.KeyUp || k.Code == tea.KeyDown:
 		cmds = append(cmds, m.updateEditor(msg)...)
@@ -237,10 +222,8 @@ func (m *model) handleKeyPress(msg tea.KeyPressMsg) []tea.Cmd {
 		cmds = append(cmds, m.updateEditor(msg)...)
 	}
 
-	// After editor update, refresh command palette state
 	m.palette.UpdateFilter(m.editor.Value())
 
-	// Special key bindings (quit, submit, etc.)
 	switch msg.String() {
 	case "ctrl+c":
 		cmds = append(cmds, tea.Quit)
@@ -261,7 +244,6 @@ func (m *model) handleKeyPress(msg tea.KeyPressMsg) []tea.Cmd {
 			m.editor.Reset()
 			m.history.Append(compoent.NewUserMessage(input))
 
-			// Persist user message (lazily creates session row on first message).
 			if m.store != nil {
 				m.store.EnsureSession(m.sessionID, m.agent.Model(), m.cwd)
 				m.store.AppendMessage(store.Message{
@@ -282,14 +264,10 @@ func (m *model) handleKeyPress(msg tea.KeyPressMsg) []tea.Cmd {
 	return cmds
 }
 
-// ---- command execution ----
 
-// executeCommand runs the given command with the provided arguments,
-// appends the result to the chat history.  The caller is responsible
-// for dismissing the palette and resetting the editor beforehand.
 func (m *model) executeCommand(cmd command.Executor, args string) tea.Cmd {
 	env := &command.Env{
-		TUI: m, // *model implements ModelAccess directly
+		TUI: m,
 	}
 
 	ctx := context.Background()
@@ -302,10 +280,7 @@ func (m *model) executeCommand(cmd command.Executor, args string) tea.Cmd {
 	return nil
 }
 
-// ---- layout helpers ----
 
-// adjustLayout recalculates editor and output dimensions based on the
-// current terminal size, command palette visibility, and editor height.
 func (m *model) adjustLayout() {
 	m.editor.SetWidth(m.width - 2)
 	m.output.SetWidth(m.width - 2)
@@ -317,7 +292,7 @@ func (m *model) adjustLayout() {
 		editorHeight = 17
 		m.editor.SetHeight(editorHeight)
 	}
-	totalBottom := editorHeight + paletteHeight + 1 // +1 for spacing
+	totalBottom := editorHeight + paletteHeight + 1
 	outputHeight := max(0, m.height-totalBottom)
 	m.output.SetHeight(outputHeight)
 
@@ -326,12 +301,9 @@ func (m *model) adjustLayout() {
 	}
 }
 
-// handleWindowSizeMsg updates dimensions on terminal resize.
 func (m *model) handleWindowSizeMsg(msg tea.WindowSizeMsg) []tea.Cmd {
 	m.width = msg.Width
 	m.height = msg.Height
-	m.history.MarkDirty() // width changed, need re-render
-	// WindowSizeMsg still needs to reach editor and output so they
-	// can adjust their own internal sizes.
+	m.history.MarkDirty()
 	return append(m.updateEditor(msg), m.updateOutput(msg)...)
 }
