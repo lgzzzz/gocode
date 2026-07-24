@@ -3,6 +3,7 @@ package store
 import (
 	"bufio"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"os"
@@ -49,12 +50,21 @@ func sessionFileName(id string) string {
 	return id + ".session"
 }
 
+func hashCWD(cwd string) string {
+	h := sha256.Sum256([]byte(cwd))
+	return hex.EncodeToString(h[:4])
+}
+
 func defaultDir() string {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		home = "."
 	}
-	dir := filepath.Join(home, ".gocode", "sessions")
+	cwd, err := os.Getwd()
+	if err != nil {
+		cwd = "default"
+	}
+	dir := filepath.Join(home, ".gocode", "sessions", hashCWD(cwd))
 	return dir
 }
 
