@@ -12,7 +12,6 @@ import (
 	"time"
 )
 
-
 type Session struct {
 	SessionID string
 	CreatedAt string
@@ -37,8 +36,6 @@ type Message struct {
 
 	HasError bool
 }
-
-
 
 type Store struct {
 	mu       sync.Mutex
@@ -143,7 +140,7 @@ func (s *Store) Close() error {
 func NewSessionID() string {
 	b := make([]byte, 3)
 	rand.Read(b)
-	return time.Now().Format("20060102-150405") + "-" + hex.EncodeToString(b)
+	return time.Now().Format("2006-01-02-15-04-05") + "_" + hex.EncodeToString(b)
 }
 
 func (s *Store) EnsureSession(id, model, cwd string) error {
@@ -216,7 +213,6 @@ func (s *Store) GetSessionMessages(sessionID string) ([]Message, error) {
 	copy(out, msgs)
 	return out, nil
 }
-
 
 func (s *Store) getOrOpenWriter(id string) (*os.File, error) {
 	if w, ok := s.writers[id]; ok {
