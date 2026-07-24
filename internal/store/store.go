@@ -141,6 +141,9 @@ func (s *Store) loadSessionFile(filePath string) {
 		}
 		lineNum++
 	}
+	sort.Slice(s.messages[sessionID], func(i, j int) bool {
+		return s.messages[sessionID][i].CreatedAt < s.messages[sessionID][j].CreatedAt
+	})
 }
 
 // Close closes all open file handles. Call on program exit (Ctrl+C).
@@ -176,7 +179,7 @@ func (s *Store) EnsureSession(id, model, cwd string) error {
 		CWD:       cwd,
 	}
 
-	return s.writeSessionFileLocked(id)
+	return s.writeSessionFile(id)
 }
 
 // ListSessions returns sessions ordered by CreatedAt descending.
@@ -218,11 +221,11 @@ func (s *Store) AppendMessage(msg Message) error {
 	// If FirstMsg changed (first user message), rewrite the entire file
 	// so the session header on line 1 stays correct.
 	if needRewrite {
-		return s.writeSessionFileLocked(msg.SessionID)
+		return s.writeSessionFile(msg.SessionID)
 	}
 
 	// Fast path: append a single line using the open file handle.
-	return s.appendLineLocked(msg.SessionID, msg)
+	return s.appendLine(msg.SessionID, msg)
 }
 
 // GetSessionMessages returns all persisted messages for a session.
@@ -243,7 +246,7 @@ func (s *Store) GetSessionMessages(sessionID string) ([]Message, error) {
 
 // getOrOpenWriter returns the cached file handle for the session,
 // or opens one in append mode if none is cached yet.
-func (s *Store) getOrOpenWriterLocked(id string) (*os.File, error) {
+func (s *Store) getOrOpenWriter(id string) (*os.File, error) {
 	if w, ok := s.writers[id]; ok {
 		return w, nil
 	}
@@ -256,10 +259,10 @@ func (s *Store) getOrOpenWriterLocked(id string) (*os.File, error) {
 	return w, nil
 }
 
-// writeSessionFileLocked writes (or rewrites) the full session file.
+// writeSessionFile writes (or rewrites) the full session file.
 // Closes the previous handle (if any), creates a fresh file, writes
 // all data, then opens a new handle for future appends.
-func (s *Store) writeSessionFileLocked(id string) error {
+func (s *Store) writeSessionFile(id string) error {
 	// Close and remove old cached handle.
 	if old, ok := s.writers[id]; ok {
 		old.Close()
@@ -309,10 +312,10 @@ func (s *Store) writeSessionFileLocked(id string) error {
 	return nil
 }
 
-// appendLineLocked appends a single message JSON line using the cached
+// appendLine appends a single message JSON line using the cached
 // file handle. Opens the handle lazily if needed.
-func (s *Store) appendLineLocked(sessionID string, msg Message) error {
-	w, err := s.getOrOpenWriterLocked(sessionID)
+func (s *Store) appendLine(sessionID string, msg Message) error {
+	w, err := s.getOrOpenWriter(sessionID)
 	if err != nil {
 		return err
 	}

@@ -225,6 +225,12 @@ func (m *model) handleKeyPress(msg tea.KeyPressMsg) []tea.Cmd {
 		// editor process them normally.
 	}
 
+	// PageUp/PageDown scroll the output viewport.
+	if k.Code == tea.KeyPgUp || k.Code == tea.KeyPgDown {
+		cmds = append(cmds, m.updateOutput(msg)...)
+		return cmds
+	}
+
 	// Always forward to editor (except for special keys that we handle first).
 	switch {
 	case k.Code == tea.KeyUp || k.Code == tea.KeyDown:
