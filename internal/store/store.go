@@ -2,14 +2,14 @@ package store
 
 import (
 	"bufio"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"os"
 	"path/filepath"
 	"sort"
 	"sync"
 	"time"
-
-	"github.com/google/uuid"
 )
 
 
@@ -141,7 +141,9 @@ func (s *Store) Close() error {
 }
 
 func NewSessionID() string {
-	return uuid.New().String()
+	b := make([]byte, 3)
+	rand.Read(b)
+	return time.Now().Format("20060102-150405") + "-" + hex.EncodeToString(b)
 }
 
 func (s *Store) EnsureSession(id, model, cwd string) error {
