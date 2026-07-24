@@ -333,7 +333,7 @@ func AllTools() (map[string]ToolExecutor, []ToolDef) {
 		defs = append(defs, ToolDef{
 			Name:          "powershell",
 			Description:   "Execute a shell command on Windows systems. Runs via PowerShell. Returns stdout and stderr combined.",
-			PromptSnippet: "Execute shell commands on Windows systems",
+			PromptSnippet: "Execute shell commands on Windows systems. PowerShell uses `;` instead of `&&`.",
 			Parameters: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
