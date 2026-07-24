@@ -329,8 +329,12 @@ func (a *Agent) streamOneAttempt(
 			})
 		}
 	}
-	cb(CallbackMsg{Type: MsgThinking, ID: fullReasoningId, Content: fullReasoning.String()})
-	cb(CallbackMsg{Type: MsgAssistant, ID: fullContentId, Content: fullContent.String()})
+	if fullReasoning.Len() != 0 {
+		cb(CallbackMsg{Type: MsgThinking, ID: fullReasoningId, Content: fullReasoning.String()})
+	}
+	if fullContent.Len() != 0 {
+		cb(CallbackMsg{Type: MsgAssistant, ID: fullContentId, Content: fullContent.String()})
+	}
 	return fullContent.String(), fullReasoning.String(), toolCalls, nil
 }
 
