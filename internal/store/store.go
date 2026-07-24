@@ -53,11 +53,11 @@ func sessionFileName(id string) string {
 }
 
 func defaultDir() string {
-	home, err := os.UserHomeDir()
+	cwd, err := os.Getwd()
 	if err != nil {
-		home = "."
+		cwd = "."
 	}
-	dir := filepath.Join(home, ".gocode", "sessions")
+	dir := filepath.Join(cwd, ".gocode", "sessions")
 	return dir
 }
 
