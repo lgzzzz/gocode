@@ -407,6 +407,11 @@ func ReconstructHistory(msgs []HistoryMessage, systemPrompt string) []goopenai.C
 			}
 		}
 	}
+	var pendingToolResult []goopenai.ChatCompletionMessage
+	addPendingToolResult := func() {
+		result = append(result, pendingToolResult...)
+		pendingToolResult = nil
+	}
 	i := 0
 	for i < len(msgs) {
 		msg := msgs[i]
@@ -420,20 +425,21 @@ func ReconstructHistory(msgs []HistoryMessage, systemPrompt string) []goopenai.C
 			i++
 		case string(MsgThinking):
 			if pendingAssistant.ReasoningContent != "" {
-				// 预期之外的情况, 直接报个错
-				panic(`pendingAssistant.ReasoningContent != ""`)
+				addPendingAssistant()
+				addPendingToolResult()
 			}
 			pendingAssistant.ReasoningContent = msg.Content
 			i++
 		case string(MsgAssistant):
 			if pendingAssistant.Content != "" {
-				// 预期之外的情况, 直接报个错
-				panic(`pendingAssistant.Content != ""`)
+				addPendingAssistant()
+				addPendingToolResult()
 			}
 			pendingAssistant.Content = msg.Content
 			i++
 		case string(MsgToolCall):
 			if pendingAssistant.Content == "" && pendingAssistant.ReasoningContent == "" {
+				// 预期之外的情况, 直接报个错
 				panic(`pendingAssistant.Content == "" && pendingAssistant.ReasoningContent == ""`)
 			}
 			pendingAssistant.ToolCalls = append(pendingAssistant.ToolCalls, goopenai.ToolCall{
@@ -450,8 +456,7 @@ func ReconstructHistory(msgs []HistoryMessage, systemPrompt string) []goopenai.C
 				// 预期之外的情况, 直接报个错
 				panic(`pendingAssistant.ToolCalls == 0`)
 			}
-			addPendingAssistant()
-			result = append(result, goopenai.ChatCompletionMessage{
+			pendingToolResult = append(pendingToolResult, goopenai.ChatCompletionMessage{
 				Role:       goopenai.ChatMessageRoleTool,
 				Content:    msg.Content,
 				ToolCallID: msg.ToolCallID,
@@ -463,7 +468,7 @@ func ReconstructHistory(msgs []HistoryMessage, systemPrompt string) []goopenai.C
 		}
 	}
 	addPendingAssistant()
-
+	addPendingToolResult()
 	return result
 }
 
