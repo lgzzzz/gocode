@@ -472,16 +472,44 @@ func ReconstructHistory(msgs []HistoryMessage, systemPrompt string) []goopenai.C
 	return result
 }
 
-// systemPrompt builds the system prompt dynamically from the available tool
-// definitions, matching the structure and style of pi's system prompt.
+// systemPromptTemplate defines the system prompt structure.
+// Placeholders are replaced at runtime:
+//
+//	{{.ToolsList}}   – available tools with descriptions
+//	{{.Guidelines}}  – tool-specific and common usage guidelines
+//	{{.CWD}}         – current working directory
+//	{{.OS}}          – operating system name
+const systemPromptTemplate = `You are an expert coding assistant called GoCode.
+You help users by reading files, executing commands, editing code, and writing new files.
+
+Available tools:
+{{ToolsList}}
+
+Guidelines:
+{{Guidelines}}
+Be concise. When done, summarize what you accomplished.
+Be concise in your responses.
+Show file paths clearly when working with files.
+
+Current working directory: {{CWD}}
+Current environment: {{OS}}`
+
+// systemPrompt builds the system prompt by rendering the template with
+// tool descriptions, guidelines, and environment info.
 func (a *Agent) systemPrompt() string {
+	prompt := systemPromptTemplate
+
+	prompt = strings.Replace(prompt, "{{ToolsList}}", a.buildToolsPrompt(), 1)
+	prompt = strings.Replace(prompt, "{{Guidelines}}", a.buildGuidelinesPrompt(), 1)
+	prompt = strings.Replace(prompt, "{{CWD}}", a.cwd, 1)
+	prompt = strings.Replace(prompt, "{{OS}}", osName(), 1)
+
+	return prompt
+}
+
+// buildToolsPrompt returns the formatted list of available tools.
+func (a *Agent) buildToolsPrompt() string {
 	var sb strings.Builder
-
-	sb.WriteString(`You are an expert coding assistant called GoCode.
-You help users by reading files, executing commands, editing code, and writing new files.`)
-
-	// Available tools
-	sb.WriteString("Available tools:\n")
 	for _, t := range a.oaiTools {
 		snippet := t.Function.Description // fallback to full description
 		for _, d := range a.toolDefs {
@@ -491,11 +519,16 @@ You help users by reading files, executing commands, editing code, and writing n
 			}
 		}
 		sb.WriteString(fmt.Sprintf("- %s: %s\n", t.Function.Name, snippet))
-	}
 
-	// Guidelines from tool definitions
-	sb.WriteString("\nGuidelines:\n")
+	}
+	return strings.TrimSpace(sb.String())
+}
+
+// buildGuidelinesPrompt returns the formatted, deduplicated list of guidelines.
+func (a *Agent) buildGuidelinesPrompt() string {
+	var sb strings.Builder
 	seen := make(map[string]bool)
+
 	for _, t := range a.oaiTools {
 		for _, d := range a.toolDefs {
 			if d.Name == t.Function.Name {
@@ -510,50 +543,37 @@ You help users by reading files, executing commands, editing code, and writing n
 			}
 		}
 	}
+	return strings.TrimSpace(sb.String())
+}
 
-	// Common guidelines
-	addCommonGuideline := func(g string) {
-		g = strings.TrimSpace(g)
-		if g != "" && !seen[g] {
-			seen[g] = true
-			sb.WriteString(fmt.Sprintf("- %s\n", g))
-		}
-	}
-	addCommonGuideline("Be concise. When done, summarize what you accomplished.")
-	addCommonGuideline("Be concise in your responses")
-	addCommonGuideline("Show file paths clearly when working with files")
-
-	// Environment info
-	sb.WriteString(fmt.Sprintf("\nCurrent working directory: %s", a.cwd))
-
-	osName := runtime.GOOS
-	switch osName {
+// osName returns a human-readable OS name.
+func osName() string {
+	switch runtime.GOOS {
 	case "windows":
-		osName = "Windows"
+		return "Windows"
 	case "linux":
-		osName = "Linux"
+		return "Linux"
 	case "darwin":
-		osName = "macOS"
+		return "macOS"
+	default:
+		return runtime.GOOS
 	}
-	sb.WriteString(fmt.Sprintf("\nCurrent environment: %s", osName))
-
-	return sb.String()
 }
 
 // ---- message constructors ----
 
 func sysMsg(content string) goopenai.ChatCompletionMessage {
-	return goopenai.ChatCompletionMessage{Role: "system", Content: content}
+	return goopenai.ChatCompletionMessage{Role: goopenai.ChatMessageRoleSystem, Content: content}
 }
 
 func userMsg(content string) goopenai.ChatCompletionMessage {
-	return goopenai.ChatCompletionMessage{Role: "user", Content: content}
+	return goopenai.ChatCompletionMessage{Role: goopenai.ChatMessageRoleUser, Content: content}
 }
 
 func asstMsg(content string) goopenai.ChatCompletionMessage {
-	return goopenai.ChatCompletionMessage{Role: "assistant", Content: content}
+	return goopenai.ChatCompletionMessage{Role: goopenai.ChatMessageRoleAssistant, Content: content}
 }
 
 func toolMsg(content, toolCallID string) goopenai.ChatCompletionMessage {
-	return goopenai.ChatCompletionMessage{Role: "tool", Content: content, ToolCallID: toolCallID}
+	return goopenai.ChatCompletionMessage{Role: goopenai.ChatMessageRoleTool, Content: content, ToolCallID: toolCallID}
 }
