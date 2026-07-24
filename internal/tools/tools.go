@@ -205,9 +205,14 @@ func (t *PowershellTool) Execute(argsJSON string) (string, error) {
 }
 
 // buildWindowsShellCmd returns a shell command using PowerShell (fallback cmd).
+// The command is wrapped to ensure output encoding is UTF-8, so Chinese and other
+// Unicode characters are preserved correctly.
 func buildWindowsShellCmd(command string) *exec.Cmd {
 	if _, err := exec.LookPath("powershell.exe"); err == nil {
-		return exec.Command("powershell", "-NoProfile", "-NonInteractive", "-Command", command)
+		// Prepend UTF-8 output encoding setup before the user's command.
+		// This ensures that tools like echo/Write-Output emit UTF-8 text.
+		wrappedCmd := "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; " + command
+		return exec.Command("powershell", "-NoProfile", "-NonInteractive", "-Command", wrappedCmd)
 	}
 	return exec.Command("cmd", "/c", command)
 }
