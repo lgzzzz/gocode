@@ -3,6 +3,8 @@ package command
 import (
 	"context"
 	"strings"
+
+	"github.com/lgzzzz/gocode/internal/tools"
 )
 
 type Executor interface {
@@ -21,6 +23,7 @@ type TUIAccess interface {
 	NewSession()
 	OpenSessionBrowser()
 	SystemPrompt() string
+	RollbackTracker() *tools.RollbackTracker
 }
 
 type Result struct {

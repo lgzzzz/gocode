@@ -16,6 +16,7 @@ import (
 	"github.com/lgzzzz/gocode/internal/agent"
 	"github.com/lgzzzz/gocode/internal/command"
 	"github.com/lgzzzz/gocode/internal/store"
+	"github.com/lgzzzz/gocode/internal/tools"
 	"github.com/lgzzzz/gocode/internal/tui/compoent"
 	"github.com/lgzzzz/gocode/internal/tui/history"
 	"github.com/lgzzzz/gocode/internal/tui/palette"
@@ -40,6 +41,7 @@ type model struct {
 	sessionID      string
 	cwd            string
 	sessionBrowser *sessionbrowser.Browser
+	rollbackTracker *tools.RollbackTracker
 }
 
 func NewModel(ag *agent.Agent, st *store.Store) tea.Model {
@@ -59,26 +61,31 @@ func NewModel(ag *agent.Agent, st *store.Store) tea.Model {
 	ta.SetStyles(styles)
 	ta.Focus() // 初始获得焦点
 
+	rollbackTracker := tools.NewRollbackTracker()
+	ag.SetToolTracker(rollbackTracker)
+
 	reg := command.NewRegistry()
 	reg.Register(&command.NewCommand{})
 	reg.Register(&command.SessionsCommand{})
 	reg.Register(&command.InitCommand{})
 	reg.Register(&command.PromptCommand{})
+	reg.Register(&command.RollbackCommand{})
 
 	cwd, _ := os.Getwd()
 	sessionID := store.NewSessionID()
 
 	m := model{
-		editor:         ta,
-		output:         viewport.New(),
-		agent:          ag,
-		width:          width,
-		height:         height,
-		palette:        palette.New(reg),
-		store:          st,
-		sessionID:      sessionID,
-		cwd:            cwd,
-		sessionBrowser: sessionbrowser.New(width, height, st),
+		editor:          ta,
+		output:          viewport.New(),
+		agent:           ag,
+		width:           width,
+		height:          height,
+		palette:         palette.New(reg),
+		store:           st,
+		sessionID:       sessionID,
+		cwd:             cwd,
+		sessionBrowser:  sessionbrowser.New(width, height, st),
+		rollbackTracker: rollbackTracker,
 	}
 	m.adjustLayout()
 	return m

@@ -319,6 +319,11 @@ func (a *Agent) SetLogger(l Logger) {
 	a.logger = l
 }
 
+// SetToolTracker sets the rollback tracker on all tools that support it.
+func (a *Agent) SetToolTracker(tracker *tools.RollbackTracker) {
+	tools.SetTrackerOnAll(a.toolMap, tracker)
+}
+
 func (a *Agent) ClearContextMessage() {
 	a.contextMessages = nil
 }

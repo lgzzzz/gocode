@@ -8,11 +8,15 @@ import (
 
 	"github.com/lgzzzz/gocode/internal/agent"
 	"github.com/lgzzzz/gocode/internal/store"
+	"github.com/lgzzzz/gocode/internal/tools"
 	"github.com/lgzzzz/gocode/internal/tui/compoent"
 )
 
 
 func (m *model) StartAgent(input string) tea.Cmd {
+	// Clear rollback tracker for the new agent interaction
+	m.rollbackTracker.Clear()
+
 	m.running = true
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -53,6 +57,8 @@ func (m *model) Running() bool { return m.running }
 func (m *model) SystemPrompt() string { return m.agent.SystemPrompt() }
 
 func (m *model) CancelAgent() { m.cancelAgent() }
+
+func (m *model) RollbackTracker() *tools.RollbackTracker { return m.rollbackTracker }
 
 func (m *model) cancelAgent() {
 	if m.cancel != nil {

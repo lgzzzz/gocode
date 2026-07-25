@@ -13,6 +13,7 @@ import (
 type ToolExecutor interface {
 	Execute(argsJSON string) (string, error)
 	Name() string
+	SetTracker(tracker *RollbackTracker)
 }
 
 type ToolDef struct {
@@ -23,10 +24,10 @@ type ToolDef struct {
 	PromptGuidelines []string
 }
 
-
 type ReadTool struct{}
 
-func (t *ReadTool) Name() string { return "read" }
+func (t *ReadTool) Name() string                        { return "read" }
+func (t *ReadTool) SetTracker(tracker *RollbackTracker) {} // read does not modify anything
 
 type readArgs struct {
 	Path   string `json:"path"`
@@ -70,10 +71,12 @@ func (t *ReadTool) Execute(argsJSON string) (string, error) {
 	return result, nil
 }
 
+type WriteTool struct {
+	tracker *RollbackTracker
+}
 
-type WriteTool struct{}
-
-func (t *WriteTool) Name() string { return "write" }
+func (t *WriteTool) Name() string                        { return "write" }
+func (t *WriteTool) SetTracker(tracker *RollbackTracker) { t.tracker = tracker }
 
 type writeArgs struct {
 	Path    string `json:"path"`
@@ -88,6 +91,13 @@ func (t *WriteTool) Execute(argsJSON string) (string, error) {
 	if args.Path == "" {
 		return "", fmt.Errorf("write: path is required")
 	}
+	var oldContent []byte
+	existed := false
+	if info, err := os.Stat(args.Path); err == nil && !info.IsDir() {
+		existed = true
+		oldContent, _ = os.ReadFile(args.Path)
+	}
+	t.tracker.RecordFileWrite(args.Path, oldContent, existed)
 	if err := os.MkdirAll(dirOf(args.Path), 0755); err != nil {
 		return "", fmt.Errorf("write: %w", err)
 	}
@@ -97,10 +107,12 @@ func (t *WriteTool) Execute(argsJSON string) (string, error) {
 	return fmt.Sprintf("Wrote %d bytes to %s", len(args.Content), args.Path), nil
 }
 
+type EditTool struct {
+	tracker *RollbackTracker
+}
 
-type EditTool struct{}
-
-func (t *EditTool) Name() string { return "edit" }
+func (t *EditTool) Name() string                        { return "edit" }
+func (t *EditTool) SetTracker(tracker *RollbackTracker) { t.tracker = tracker }
 
 type editArgs struct {
 	Path    string `json:"path"`
@@ -130,6 +142,10 @@ func (t *EditTool) Execute(argsJSON string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("edit: %w", err)
 	}
+
+	// Record original file state for rollback
+	t.tracker.RecordFileWrite(args.Path, data, true)
+
 	content := string(data)
 	content = strings.ReplaceAll(content, "\r\n", "\n")
 	content = strings.ReplaceAll(content, "\r", "\n")
@@ -147,10 +163,12 @@ func (t *EditTool) Execute(argsJSON string) (string, error) {
 	return fmt.Sprintf("Edited %s: replaced 1 occurrence", args.Path), nil
 }
 
+type BashTool struct {
+	tracker *RollbackTracker
+}
 
-type BashTool struct{}
-
-func (t *BashTool) Name() string { return "bash" }
+func (t *BashTool) Name() string                        { return "bash" }
+func (t *BashTool) SetTracker(tracker *RollbackTracker) { t.tracker = tracker }
 
 type bashArgs struct {
 	Command string `json:"command"`
@@ -165,7 +183,9 @@ func (t *BashTool) Execute(argsJSON string) (string, error) {
 	if args.Command == "" {
 		return "", fmt.Errorf("bash: command is required")
 	}
-	return runShellCommand(args.Command, args.Timeout, "bash", buildLinuxShellCmd)
+	result, err := runShellCommand(args.Command, args.Timeout, "bash", buildLinuxShellCmd)
+	t.tracker.RecordShellCommand(args.Command, result)
+	return result, err
 }
 
 func buildLinuxShellCmd(command string) *exec.Cmd {
@@ -175,10 +195,12 @@ func buildLinuxShellCmd(command string) *exec.Cmd {
 	return exec.Command("sh", "-c", command)
 }
 
+type PowershellTool struct {
+	tracker *RollbackTracker
+}
 
-type PowershellTool struct{}
-
-func (t *PowershellTool) Name() string { return "powershell" }
+func (t *PowershellTool) Name() string                        { return "powershell" }
+func (t *PowershellTool) SetTracker(tracker *RollbackTracker) { t.tracker = tracker }
 
 type powershellArgs struct {
 	Command string `json:"command"`
@@ -193,7 +215,9 @@ func (t *PowershellTool) Execute(argsJSON string) (string, error) {
 	if args.Command == "" {
 		return "", fmt.Errorf("powershell: command is required")
 	}
-	return runShellCommand(args.Command, args.Timeout, "powershell", buildWindowsShellCmd)
+	result, err := runShellCommand(args.Command, args.Timeout, "powershell", buildWindowsShellCmd)
+	t.tracker.RecordShellCommand(args.Command, result)
+	return result, err
 }
 
 func buildWindowsShellCmd(command string) *exec.Cmd {
@@ -237,7 +261,6 @@ func runShellCommand(command string, timeoutSec int, toolName string, buildCmd f
 		return fmt.Sprintf("(timed out after %ds)\n%s", timeout, out.String()), nil
 	}
 }
-
 
 func dirOf(path string) string {
 	if idx := strings.LastIndex(path, "/"); idx >= 0 {
