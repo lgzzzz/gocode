@@ -96,7 +96,7 @@ Type `/` in the input to bring up the command palette:
 - `/sessions` — Browse and resume past sessions
 - `/init` — Analyze the project and generate a `AGENTS.md` file at `.gocode/AGENTS.md`
 - `/prompt` — Display the current system prompt
-- `/rollback` — Restore files modified by the last agent interaction (side-effect reversal)
+- `/rollback` — Restore files modified by the last agent interaction and roll back the conversation context
 
 #### Key Bindings
 
@@ -156,6 +156,7 @@ The core of the application. Manages:
 - **Tool calling**: Supports native function calling. After receiving tool calls, executes them locally and feeds results back into the conversation loop.
 - **Retry logic**: Retries failed API calls up to 3 times with 2-second base delay. When retrying, emits `MsgError` and `MsgRetryWait` callbacks to inform the user.
 - **History reconstruction**: `ReconstructHistory()` rebuilds OpenAI-format messages from persisted session data (a list of `HistoryMessage` structs) so past sessions can be resumed with full context.
+- **Context truncation**: `TruncateContextFromLastUser()` removes the last user message and all subsequent messages for rollback purposes. `ClearContextMessage()` resets the entire context.
 
 ### `internal/tools` — Tool System
 
@@ -177,7 +178,7 @@ Each tool implements the `ToolExecutor` interface (`Name()`, `Execute()`, `SetTr
 - **File changes**: Original content before modification, whether the file existed, and deduplicates by path (first write wins)
 - **Shell commands**: All executed commands and their output
 
-The `/rollback` slash command restores modified files to their original state and reports shell commands that were executed (which cannot be automatically rolled back).
+The `/rollback` slash command restores modified files to their original state and reports shell commands that were executed (which cannot be automatically rolled back). It also rolls back the conversation context by removing the last user interaction.
 
 ### `internal/command` — Slash Commands
 
@@ -202,23 +203,24 @@ Stores sessions as JSONL files in `~/.gocode/sessions/<sanitized-cwd-path>/`. Ea
 - Line 1: Session metadata (ID, created time, model, CWD, first message)
 - Subsequent lines: Messages (type, content, tool call info, error status)
 
-Thread-safe with mutex. Supports listing, reading, and appending. The CWD path is sanitized into a directory name (e.g., `C:\Users\...\myproject` becomes `c-users-...-myproject`).
+Thread-safe with mutex. Supports listing, reading, appending, and truncating (removing messages from the last user input onward). The CWD path is sanitized into a directory name by converting non-alphanumeric characters to dashes (e.g., `C:\Users\...\myproject` becomes `C-Users-...-myproject`).
 
 ### `internal/tui` — Terminal UI
 
 Built with Bubble Tea v2:
 
-- **Model** holds editor (textarea), output (viewport), agent reference, history, palette, session browser
+- **Model** holds editor (textarea), output (viewport), agent reference, history, palette, session browser, store, sessionID, and rollbackTracker
 - **Layout**: Output area on top (scrollable viewport), optional palette, then input editor at bottom. Editor has a 17-line max height.
 - **Key handling** is layered: session browser → palette → editor — each layer can consume or pass through keys
 - **Rendering**: Uses a dirty-flag pattern in history; only re-renders when content changes
 - **Focus**: Editor has initial focus after launch
+- **Cursor positioning**: Cursor is manually adjusted to account for output height, palette height, and border spacing
 
 #### Sub-packages
 
-- **`compoent/`**: Defines a `Component` interface (`Type()`, `MsgID()`, `Content()`, `Render()`, `SetContent()`) and concrete types: `UserMessage`, `AssistantMessage`, `ThinkingMessage`, `ToolMessage`, `ErrorMessage`, `SystemMessage`. Each has a render cache with dirty-flag that only recalculates when content or width changes. Tool messages show a formatted first line (path/command) and up to 6 lines of result, with green styling for success and red for errors.
-- **`history/`**: In-memory list of components with `Append` (add new), `Upsert` (update-or-insert by MsgID for streaming updates), `UpdateToolResult` (set tool result on an existing ToolMessage), and dirty-flag-based `Render` that returns line strings only when dirty.
-- **`palette/`**: Slash-command palette that appears when typing `/`. Supports filtering by name prefix, keyboard navigation (up/down), tab completion (auto-fills command name), and enter-to-execute. Renders up to 7 visible rows with highlight on selected item.
+- **`compoent/`** (note: intentional spelling): Defines a `Component` interface (`Type()`, `MsgID()`, `Content()`, `Render()`, `SetContent()`) and concrete types: `UserMessage`, `AssistantMessage`, `ThinkingMessage`, `ToolMessage`, `ErrorMessage`, `SystemMessage`. Each has a render cache with dirty-flag that only recalculates when content or width changes. Tool messages show a formatted first line (path/command) and up to 6 lines of result, with green styling for success and red for errors.
+- **`history/`**: In-memory list of components with `Append` (add new), `Upsert` (update-or-insert by MsgID for streaming updates), `UpdateToolResult` (set tool result on an existing ToolMessage), `TruncateFromLastUser` (remove last user message and everything after for rollback), `Clear`, and dirty-flag-based `Render` that returns line strings only when dirty.
+- **`palette/`**: Slash-command palette that appears when typing `/`. Supports filtering by name prefix, keyboard navigation (up/down), tab completion (auto-fills command name), and enter-to-execute. Renders up to 7 visible rows with highlight on selected item. The `Args()` method extracts arguments passed after the command name.
 - **`sessionbrowser/`**: A list-based modal for browsing past sessions. Uses a custom `list.Item` delegate for rendering session items with timestamps and first-message previews. Supports selection via Enter to load a session.
 
 ## Notes and Special Conventions
@@ -257,4 +259,12 @@ Content is streamed incrementally. The TUI uses `Upsert` (update-or-insert) for 
 2. `write` and `edit` tools record original file state before modifying
 3. Shell tools record the command and output
 4. The user can invoke `/rollback` to restore files and review shell commands
-5. After rollback or starting a new agent interaction, the tracker is cleared
+5. `/rollback` also truncates the conversation context (TUI history, agent context messages, and persisted store messages) back to before the last user interaction
+6. After rollback or starting a new agent interaction, the tracker is cleared
+
+### Session Persistence
+
+- Each session gets a unique ID in the format `YYYY-MM-DD-HH-MM-SS-<random-hex>`
+- Messages are persisted in real-time as they stream in (assistant, thinking, tool calls, tool results)
+- When loading a past session, persisted messages are reconstructed into OpenAI-format messages via `ReconstructHistory()` and loaded into the agent context
+- The session store uses a `sync.Mutex` for thread-safe access; writers are kept open for efficient appending
