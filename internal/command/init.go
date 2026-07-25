@@ -29,7 +29,7 @@ func (c *InitCommand) Execute(ctx context.Context, args string, env *Env) (*Resu
 		env.TUI.CancelAgent()
 	}
 	return &Result{
-		Message:    "正在分析项目并生成 AGENTS.md ...",
+		Message:    "Analyzing project and generating AGENTS.md ...",
 		AgentInput: initPrompt,
 	}, nil
 }
