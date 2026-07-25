@@ -22,7 +22,6 @@ import (
 	"github.com/lgzzzz/gocode/internal/tui/sessionbrowser"
 )
 
-
 type model struct {
 	editor  textarea.Model
 	output  viewport.Model
@@ -63,6 +62,7 @@ func NewModel(ag *agent.Agent, st *store.Store) tea.Model {
 	reg := command.NewRegistry()
 	reg.Register(&command.NewCommand{})
 	reg.Register(&command.SessionsCommand{})
+	reg.Register(&command.InitCommand{})
 
 	cwd, _ := os.Getwd()
 	sessionID := store.NewSessionID()
@@ -156,7 +156,6 @@ func (m model) View() tea.View {
 
 	return v
 }
-
 
 // handleKeyPress dispatches key events to the appropriate handler based on UI mode.
 // Layer 1: Session browser modal → handleSessionBrowserKey
@@ -291,7 +290,6 @@ func (m *model) persistUserInput(input string) {
 	})
 }
 
-
 func (m *model) executeCommand(cmd command.Executor, args string) tea.Cmd {
 	env := &command.Env{
 		TUI: m,
@@ -301,12 +299,19 @@ func (m *model) executeCommand(cmd command.Executor, args string) tea.Cmd {
 	result, err := cmd.Execute(ctx, args, env)
 	if err != nil {
 		m.history.Append(compoent.NewErrorMessage(err.Error()))
-	} else if result != nil {
+		return nil
+	}
+	if result == nil {
+		return nil
+	}
+	if result.Message != "" {
 		m.history.Append(compoent.NewSystemMessage(result.Message))
+	}
+	if result.AgentInput != "" {
+		return m.StartAgent(result.AgentInput)
 	}
 	return nil
 }
-
 
 func (m *model) adjustLayout() {
 	m.editor.SetWidth(m.width - 2)

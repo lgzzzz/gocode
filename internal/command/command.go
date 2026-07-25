@@ -5,13 +5,11 @@ import (
 	"strings"
 )
 
-
 type Executor interface {
 	Name() string
-	Description() string                                                 // description, e.g. "开启一轮新的对话"
+	Description() string
 	Execute(ctx context.Context, args string, env *Env) (*Result, error)
 }
-
 
 type Env struct {
 	TUI TUIAccess
@@ -24,12 +22,11 @@ type TUIAccess interface {
 	OpenSessionBrowser()
 }
 
-
 type Result struct {
-	Message string
-	Error   error
+	Message    string
+	AgentInput string // 如果非空，TUI 会将其作为用户输入发送给 Agent
+	Error      error
 }
-
 
 type Registry struct {
 	commands []Executor
