@@ -247,9 +247,11 @@ func (m *model) handleEditingKey(msg tea.KeyPressMsg) (cmds []tea.Cmd) {
 		return cmds
 	}
 
+	cmds = m.updateEditor(msg)
+
 	m.palette.UpdateFilter(m.editor.Value())
 
-	return m.updateEditor(msg)
+	return cmds
 }
 
 // submitInput validates, persists, and submits the user's input to the agent.
