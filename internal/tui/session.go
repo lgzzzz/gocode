@@ -71,5 +71,6 @@ func (m *model) LoadSession(sessionID string) {
 
 	m.sessionID = sessionID
 	m.sessionBrowser.SetActive(false)
+	m.rollbackTracker.Clear()
 	m.output.GotoBottom()
 }
