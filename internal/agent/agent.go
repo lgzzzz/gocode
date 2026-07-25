@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
@@ -22,7 +23,6 @@ type Logger interface {
 type nopLogger struct{}
 
 func (nopLogger) Printf(string, ...interface{}) {}
-
 
 type MsgType string
 
@@ -331,7 +331,6 @@ func (a *Agent) SystemPrompt() string {
 	return a.systemPrompt()
 }
 
-
 type HistoryMessage struct {
 	MsgType    string
 	Content    string
@@ -431,11 +430,13 @@ Available tools:
 
 Guidelines:
 {{Guidelines}}
+
 Be concise in your responses.
 Show file paths clearly when working with files.
 
 Current working directory: {{CWD}}
-Current environment: {{OS}}`
+Current environment: {{OS}}
+`
 
 func (a *Agent) systemPrompt() string {
 	prompt := systemPromptTemplate
@@ -445,7 +446,11 @@ func (a *Agent) systemPrompt() string {
 	prompt = strings.Replace(prompt, "{{CWD}}", a.cwd, 1)
 	prompt = strings.Replace(prompt, "{{OS}}", osName(), 1)
 
-	return prompt
+	projectPrompt := a.buildAgentsMDPrompt()
+	if projectPrompt != "" {
+		return prompt + "\n" + projectPrompt
+	}
+	return projectPrompt
 }
 
 func (a *Agent) buildToolsPrompt() string {
@@ -485,6 +490,26 @@ func (a *Agent) buildGuidelinesPrompt() string {
 	return strings.TrimSpace(sb.String())
 }
 
+// loadAgentsMD looks for an AGENTS.md file in the given directory.
+// Returns the file content as a string, or empty string if not found.
+func loadAgentsMD(cwd string) string {
+	path := filepath.Join(cwd, "AGENTS.md")
+	data, err := os.ReadFile(path)
+	if err == nil {
+		return string(data)
+	}
+	return ""
+}
+
+func (a *Agent) buildAgentsMDPrompt() string {
+	content := loadAgentsMD(a.cwd)
+	if content == "" {
+		return ""
+	}
+
+	return content
+}
+
 func osName() string {
 	switch runtime.GOOS {
 	case "windows":
@@ -497,7 +522,6 @@ func osName() string {
 		return runtime.GOOS
 	}
 }
-
 
 func sysMsg(content string) goopenai.ChatCompletionMessage {
 	return goopenai.ChatCompletionMessage{Role: goopenai.ChatMessageRoleSystem, Content: content}
