@@ -24,7 +24,7 @@ type TUIAccess interface {
 
 type Result struct {
 	Message    string
-	AgentInput string // 如果非空，TUI 会将其作为用户输入发送给 Agent
+	AgentInput string
 	Error      error
 }
 

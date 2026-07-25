@@ -308,6 +308,9 @@ func (m *model) executeCommand(cmd command.Executor, args string) tea.Cmd {
 		m.history.Append(compoent.NewSystemMessage(result.Message))
 	}
 	if result.AgentInput != "" {
+		m.history.Append(compoent.NewUserMessage(result.AgentInput))
+		m.persistUserInput(result.AgentInput)
+		m.output.GotoBottom()
 		return m.StartAgent(result.AgentInput)
 	}
 	return nil
