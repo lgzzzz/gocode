@@ -3,12 +3,12 @@ package store
 import (
 	"bufio"
 	"crypto/rand"
-	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 )
@@ -50,9 +50,39 @@ func sessionFileName(id string) string {
 	return id + ".session"
 }
 
-func hashCWD(cwd string) string {
-	h := sha256.Sum256([]byte(cwd))
-	return hex.EncodeToString(h[:4])
+func cwdToPath(cwd string) string {
+	sep := func(r rune) bool { return r == '/' || r == '\\' }
+	parts := strings.FieldsFunc(cwd, sep)
+
+	var result []string
+	for _, part := range parts {
+		if part == "" {
+			continue
+		}
+		if strings.HasPrefix(part, ".") {
+			part = "dot" + part
+		}
+		cleaned := cleanPart(part)
+		if cleaned != "" {
+			result = append(result, cleaned)
+		}
+	}
+	return strings.Join(result, "-")
+}
+
+func cleanPart(s string) string {
+	var b strings.Builder
+	lastDash := false
+	for _, r := range s {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') {
+			b.WriteRune(r)
+			lastDash = false
+		} else if !lastDash {
+			b.WriteByte('-')
+			lastDash = true
+		}
+	}
+	return strings.Trim(b.String(), "-")
 }
 
 func defaultDir() string {
@@ -64,7 +94,7 @@ func defaultDir() string {
 	if err != nil {
 		cwd = "default"
 	}
-	dir := filepath.Join(home, ".gocode", "sessions", hashCWD(cwd))
+	dir := filepath.Join(home, ".gocode", "sessions", cwdToPath(cwd))
 	return dir
 }
 
