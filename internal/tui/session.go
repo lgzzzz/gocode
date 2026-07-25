@@ -8,7 +8,6 @@ import (
 	"github.com/lgzzzz/gocode/internal/tui/compoent"
 )
 
-
 func (m *model) NewSession() {
 	m.agent.ClearContextMessage()
 	m.history.Clear()
@@ -23,7 +22,7 @@ func (m *model) OpenSessionBrowser() {
 		return
 	}
 	if m.sessionBrowser.IsEmpty() {
-		m.history.Append(compoent.NewSystemMessage("📭 暂无历史会话"))
+		m.history.Append(compoent.NewSystemMessage("No history sessions"))
 		return
 	}
 	m.sessionBrowser.SetActive(true)
