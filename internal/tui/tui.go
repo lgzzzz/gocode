@@ -173,6 +173,11 @@ func (m *model) handleKeyPress(msg tea.KeyPressMsg) []tea.Cmd {
 		}
 	}
 
+	k := msg.Key()
+	if k.Code == tea.KeyPgUp || k.Code == tea.KeyPgDown {
+		return m.updateOutput(msg)
+	}
+
 	return m.handleEditingKey(msg)
 }
 
@@ -226,22 +231,7 @@ func (m *model) handlePaletteKey(msg tea.KeyPressMsg) (consumed bool, cmds []tea
 
 // handleEditingKey handles keys in normal editing mode:
 // editor input, output scrolling, global shortcuts, and input submission.
-func (m *model) handleEditingKey(msg tea.KeyPressMsg) []tea.Cmd {
-	k := msg.Key()
-
-	// Route key to editor
-	cmds := m.updateEditor(msg)
-
-	// PageUp/PageDown scroll the output (in addition to editor)
-	if k.Code == tea.KeyPgUp || k.Code == tea.KeyPgDown {
-		cmds = append(cmds, m.updateOutput(msg)...)
-		return cmds
-	}
-
-	// Keep palette filter in sync with editor content
-	m.palette.UpdateFilter(m.editor.Value())
-
-	// Global shortcuts
+func (m *model) handleEditingKey(msg tea.KeyPressMsg) (cmds []tea.Cmd) {
 	switch msg.String() {
 	case "ctrl+c":
 		return append(cmds, tea.Quit)
@@ -254,9 +244,12 @@ func (m *model) handleEditingKey(msg tea.KeyPressMsg) []tea.Cmd {
 		if cmd := m.submitInput(); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
+		return cmds
 	}
 
-	return cmds
+	m.palette.UpdateFilter(m.editor.Value())
+
+	return m.updateEditor(msg)
 }
 
 // submitInput validates, persists, and submits the user's input to the agent.
