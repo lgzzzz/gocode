@@ -3,26 +3,26 @@ package command
 import "context"
 
 // initPrompt is the preset prompt sent to the LLM to generate AGENTS.md.
-const initPrompt = `请分析当前项目并生成一个 AGENTS.md 文件放在项目根目录下。
+const initPrompt = `Please analyze the current project and generate an AGENTS.md file at .gocode/AGENTS.md in the current working directory.
 
-AGENTS.md 文件的作用是：当 AI 助手在此项目中工作时，该文件会作为系统提示词的一部分被自动加载，帮助 AI 更好地理解项目。
+The purpose of the AGENTS.md file is: when an AI assistant works in this project, this file will be automatically loaded as part of the system prompt, helping the AI better understand the project.
 
-请先用工具探索项目结构和代码（阅读关键文件、查看目录结构等），然后生成 AGENTS.md 文件。
+Please first use tools to explore the project structure and code (read key files, view directory structure, etc.), then generate the AGENTS.md file.
 
-AGENTS.md 应包含以下内容：
-1. 项目概述（项目名称、用途、技术栈）
-2. 项目目录结构说明
-3. 构建与运行说明（如何编译、运行、测试）
-4. 编码规范与约定（代码风格、命名约定等）
-5. 关键模块说明
-6. 注意事项或特殊约定
+AGENTS.md should include the following:
+1. Project overview (project name, purpose, tech stack)
+2. Project directory structure description
+3. Build and run instructions (how to compile, run, test)
+4. Coding standards and conventions (code style, naming conventions, etc.)
+5. Key module descriptions
+6. Notes or special conventions
 
-请根据实际项目内容来写，不要编造不存在的信息。使用中文编写 AGENTS.md。`
+Please write based on the actual project content, do not fabricate non-existent information. Write AGENTS.md in English.`
 
 type InitCommand struct{}
 
 func (c *InitCommand) Name() string        { return "init" }
-func (c *InitCommand) Description() string { return "分析项目并生成 AGENTS.md 文件" }
+func (c *InitCommand) Description() string { return "Analyze the project and generate AGENTS.md" }
 
 func (c *InitCommand) Execute(ctx context.Context, args string, env *Env) (*Result, error) {
 	if env.TUI.Running() {

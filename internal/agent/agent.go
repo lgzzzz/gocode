@@ -450,7 +450,7 @@ func (a *Agent) systemPrompt() string {
 	if projectPrompt != "" {
 		return prompt + "\n" + projectPrompt
 	}
-	return projectPrompt
+	return prompt
 }
 
 func (a *Agent) buildToolsPrompt() string {
