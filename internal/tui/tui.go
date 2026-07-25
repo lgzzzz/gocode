@@ -158,110 +158,137 @@ func (m model) View() tea.View {
 }
 
 
+// handleKeyPress dispatches key events to the appropriate handler based on UI mode.
+// Layer 1: Session browser modal → handleSessionBrowserKey
+// Layer 2: Command palette → handlePaletteKey (unconsumed keys pass through)
+// Layer 3: Default editing mode → handleEditingKey
 func (m *model) handleKeyPress(msg tea.KeyPressMsg) []tea.Cmd {
-	var cmds []tea.Cmd
-
 	if m.sessionBrowser.Active() {
-		switch msg.String() {
-		case "esc", "ctrl+c":
-			m.CloseSessionBrowser()
-			return nil
-		case "enter":
-			if sel := m.sessionBrowser.Selected(); sel != nil {
-				m.LoadSession(sel.SessionID)
-			}
-			return nil
-		default:
-			_, cmd := m.sessionBrowser.Update(msg)
-			if cmd != nil {
-				return []tea.Cmd{cmd}
-			}
-			return nil
-		}
+		return m.handleSessionBrowserKey(msg)
 	}
-
-	k := msg.Key()
 
 	if m.palette.Active() {
-		result := m.palette.HandleKey(msg.String())
-
-		if result.Dismiss {
-			m.editor.Reset()
-			return nil
+		consumed, cmds := m.handlePaletteKey(msg)
+		if consumed {
+			return cmds
 		}
-
-		if result.Execute != nil {
-			args := m.palette.Args(result.Execute.Name())
-			m.palette.Dismiss()
-			m.editor.Reset()
-			return []tea.Cmd{m.executeCommand(result.Execute, args)}
-		}
-
-		if result.CompleteText != "" {
-			m.editor.SetValue(result.CompleteText)
-			m.editor.CursorEnd()
-			m.palette.UpdateFilter(m.editor.Value())
-			return nil
-		}
-
-		if msg.String() == "up" || msg.String() == "down" {
-			return nil
-		}
-
 	}
 
+	return m.handleEditingKey(msg)
+}
+
+// handleSessionBrowserKey handles keys when the session browser modal is active.
+func (m *model) handleSessionBrowserKey(msg tea.KeyPressMsg) []tea.Cmd {
+	switch msg.String() {
+	case "esc", "ctrl+c":
+		m.CloseSessionBrowser()
+	case "enter":
+		if sel := m.sessionBrowser.Selected(); sel != nil {
+			m.LoadSession(sel.SessionID)
+		}
+	default:
+		_, cmd := m.sessionBrowser.Update(msg)
+		if cmd != nil {
+			return []tea.Cmd{cmd}
+		}
+	}
+	return nil
+}
+
+// handlePaletteKey handles keys when the command palette is active.
+// Returns consumed=true if the palette fully handled the key;
+// otherwise the key passes through to the editor.
+func (m *model) handlePaletteKey(msg tea.KeyPressMsg) (consumed bool, cmds []tea.Cmd) {
+	result := m.palette.HandleKey(msg.String())
+
+	switch {
+	case result.Dismiss:
+		m.editor.Reset()
+		return true, nil
+	case result.Execute != nil:
+		args := m.palette.Args(result.Execute.Name())
+		m.palette.Dismiss()
+		m.editor.Reset()
+		return true, []tea.Cmd{m.executeCommand(result.Execute, args)}
+	case result.CompleteText != "":
+		m.editor.SetValue(result.CompleteText)
+		m.editor.CursorEnd()
+		m.palette.UpdateFilter(m.editor.Value())
+		return true, nil
+	}
+
+	// Palette consumes arrow keys for navigation
+	if msg.String() == "up" || msg.String() == "down" {
+		return true, nil
+	}
+
+	return false, nil
+}
+
+// handleEditingKey handles keys in normal editing mode:
+// editor input, output scrolling, global shortcuts, and input submission.
+func (m *model) handleEditingKey(msg tea.KeyPressMsg) []tea.Cmd {
+	k := msg.Key()
+
+	// Route key to editor
+	cmds := m.updateEditor(msg)
+
+	// PageUp/PageDown scroll the output (in addition to editor)
 	if k.Code == tea.KeyPgUp || k.Code == tea.KeyPgDown {
 		cmds = append(cmds, m.updateOutput(msg)...)
 		return cmds
 	}
 
-	switch {
-	case k.Code == tea.KeyUp || k.Code == tea.KeyDown:
-		cmds = append(cmds, m.updateEditor(msg)...)
-	default:
-		cmds = append(cmds, m.updateEditor(msg)...)
-	}
-
+	// Keep palette filter in sync with editor content
 	m.palette.UpdateFilter(m.editor.Value())
 
+	// Global shortcuts
 	switch msg.String() {
 	case "ctrl+c":
-		cmds = append(cmds, tea.Quit)
-		return cmds
-
+		return append(cmds, tea.Quit)
 	case "esc":
 		if m.running {
 			m.cancelAgent()
 		}
 		return cmds
-
 	case "enter":
-		if !m.running {
-			input := strings.TrimSpace(m.editor.Value())
-			if input == "" {
-				return cmds
-			}
-			m.editor.Reset()
-			m.history.Append(compoent.NewUserMessage(input))
-
-			if m.store != nil {
-				m.store.EnsureSession(m.sessionID, m.agent.Model(), m.cwd)
-				m.store.AppendMessage(store.Message{
-					SessionID: m.sessionID,
-					MsgType:   string(agent.MsgUser),
-					Content:   input,
-				})
-			}
-
-			cmd := m.StartAgent(input)
-			if cmd != nil {
-				cmds = append(cmds, cmd)
-			}
-			m.output.GotoBottom()
+		if cmd := m.submitInput(); cmd != nil {
+			cmds = append(cmds, cmd)
 		}
 	}
 
 	return cmds
+}
+
+// submitInput validates, persists, and submits the user's input to the agent.
+func (m *model) submitInput() tea.Cmd {
+	if m.running {
+		return nil
+	}
+	input := strings.TrimSpace(m.editor.Value())
+	if input == "" {
+		return nil
+	}
+
+	m.editor.Reset()
+	m.history.Append(compoent.NewUserMessage(input))
+	m.persistUserInput(input)
+	m.output.GotoBottom()
+
+	return m.StartAgent(input)
+}
+
+// persistUserInput saves the user's input to the session store.
+func (m *model) persistUserInput(input string) {
+	if m.store == nil {
+		return
+	}
+	m.store.EnsureSession(m.sessionID, m.agent.Model(), m.cwd)
+	m.store.AppendMessage(store.Message{
+		SessionID: m.sessionID,
+		MsgType:   string(agent.MsgUser),
+		Content:   input,
+	})
 }
 
 
