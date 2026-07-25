@@ -70,6 +70,8 @@ func (m *model) RollbackConversation() (rollBacked bool) {
 	if ctxRollBacked != 0 || historyRollBacked != 0 || storeRollBacked != 0 {
 		return true
 	}
+	m.renderOutput()
+	m.output.GotoBottom()
 	return false
 }
 
