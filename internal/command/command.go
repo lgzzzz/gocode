@@ -24,6 +24,7 @@ type TUIAccess interface {
 	OpenSessionBrowser()
 	SystemPrompt() string
 	RollbackTracker() *tools.RollbackTracker
+	RollbackConversation() (rollBacked bool)
 }
 
 type Result struct {

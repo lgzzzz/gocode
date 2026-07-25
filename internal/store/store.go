@@ -241,6 +241,38 @@ func (s *Store) AppendMessage(msg Message) error {
 	return s.appendLine(msg.SessionID, msg)
 }
 
+// TruncateMessagesFromLastUser removes all messages from (and including) the last user message
+// for the given session, both in-memory and in the persisted file.
+// Returns the number of messages removed.
+func (s *Store) TruncateMessagesFromLastUser(sessionID string) int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	msgs := s.messages[sessionID]
+	if len(msgs) == 0 {
+		return 0
+	}
+
+	// Find the index of the last user message
+	lastUserIdx := -1
+	for i := len(msgs) - 1; i >= 0; i-- {
+		if msgs[i].MsgType == "user" {
+			lastUserIdx = i
+			break
+		}
+	}
+	if lastUserIdx == -1 {
+		return 0
+	}
+
+	removed := len(msgs) - lastUserIdx
+	s.messages[sessionID] = msgs[:lastUserIdx]
+
+	// Rewrite the session file
+	s.writeSessionFile(sessionID)
+	return removed
+}
+
 func (s *Store) GetSessionMessages(sessionID string) ([]Message, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

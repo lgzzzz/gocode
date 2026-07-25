@@ -44,6 +44,30 @@ func (h *History) UpdateToolResult(id, result string, hasErr bool) bool {
 	return false
 }
 
+func (h *History) Len() int {
+	return len(h.items)
+}
+
+// TruncateFromLastUser removes the last user message and everything after it.
+// Returns the number of items removed (0 if no user message found).
+func (h *History) TruncateFromLastUser() int {
+	// Find the index of the last user message
+	lastUserIdx := -1
+	for i := len(h.items) - 1; i >= 0; i-- {
+		if h.items[i].Type() == "user" {
+			lastUserIdx = i
+			break
+		}
+	}
+	if lastUserIdx == -1 {
+		return 0
+	}
+	removed := len(h.items) - lastUserIdx
+	h.items = h.items[:lastUserIdx]
+	h.dirty = true
+	return removed
+}
+
 func (h *History) Clear() {
 	h.items = nil
 	h.dirty = true

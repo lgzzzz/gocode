@@ -324,6 +324,25 @@ func (a *Agent) SetToolTracker(tracker *tools.RollbackTracker) {
 	tools.SetTrackerOnAll(a.toolMap, tracker)
 }
 
+// TruncateContextFromLastUser removes the last user message and all subsequent messages
+// from the context. Returns the truncated messages count.
+func (a *Agent) TruncateContextFromLastUser() int {
+	// Find the index of the last user message (skip system prompt at index 0)
+	lastUserIdx := -1
+	for i := len(a.contextMessages) - 1; i >= 1; i-- {
+		if a.contextMessages[i].Role == goopenai.ChatMessageRoleUser {
+			lastUserIdx = i
+			break
+		}
+	}
+	if lastUserIdx == -1 {
+		return 0
+	}
+	removed := len(a.contextMessages) - lastUserIdx
+	a.contextMessages = a.contextMessages[:lastUserIdx]
+	return removed
+}
+
 func (a *Agent) ClearContextMessage() {
 	a.contextMessages = nil
 }

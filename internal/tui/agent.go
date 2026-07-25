@@ -12,7 +12,6 @@ import (
 	"github.com/lgzzzz/gocode/internal/tui/compoent"
 )
 
-
 func (m *model) StartAgent(input string) tea.Cmd {
 	// Clear rollback tracker for the new agent interaction
 	m.rollbackTracker.Clear()
@@ -51,7 +50,6 @@ func (m *model) StartAgent(input string) tea.Cmd {
 	return waitCmd(ch)
 }
 
-
 func (m *model) Running() bool { return m.running }
 
 func (m *model) SystemPrompt() string { return m.agent.SystemPrompt() }
@@ -60,13 +58,27 @@ func (m *model) CancelAgent() { m.cancelAgent() }
 
 func (m *model) RollbackTracker() *tools.RollbackTracker { return m.rollbackTracker }
 
+// RollbackConversation truncates the agent context, TUI history, and persisted store messages
+// to remove the last user interaction and everything after it.
+func (m *model) RollbackConversation() (rollBacked bool) {
+	ctxRollBacked := m.agent.TruncateContextFromLastUser()
+	historyRollBacked := m.history.TruncateFromLastUser()
+	var storeRollBacked int
+	if m.store != nil {
+		storeRollBacked = m.store.TruncateMessagesFromLastUser(m.sessionID)
+	}
+	if ctxRollBacked != 0 || historyRollBacked != 0 || storeRollBacked != 0 {
+		return true
+	}
+	return false
+}
+
 func (m *model) cancelAgent() {
 	if m.cancel != nil {
 		m.cancel()
 		m.cancel = nil
 	}
 }
-
 
 func (m *model) handleProgressMsg(msg progressMsg) []tea.Cmd {
 	if msg.err != nil {

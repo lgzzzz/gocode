@@ -27,6 +27,9 @@ func (c *RollbackCommand) Execute(ctx context.Context, args string, env *Env) (*
 
 	restoredFiles, shellCommands, errors := tracker.Rollback()
 
+	// Also rollback the conversation context (agent, history, store)
+	rollBacked := env.TUI.RollbackConversation()
+
 	var sb strings.Builder
 
 	// Report restored files
@@ -57,6 +60,14 @@ func (c *RollbackCommand) Execute(ctx context.Context, args string, env *Env) (*
 		for _, e := range errors {
 			sb.WriteString(fmt.Sprintf("  • %v\n", e))
 		}
+	}
+
+	// Report conversation rollback
+	if sb.Len() > 0 {
+		sb.WriteString("\n")
+	}
+	if rollBacked {
+		sb.WriteString("Conversation context rolled back to before the last interaction.")
 	}
 
 	if sb.Len() == 0 {

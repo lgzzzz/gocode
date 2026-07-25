@@ -24,11 +24,14 @@ gocode/
 │   │   ├── command.go         # Command registry and Executor interface
 │   │   ├── init.go            # "init" command — triggers AGENTS.md generation
 │   │   ├── new.go             # "new" command — starts a fresh conversation
+│   │   ├── prompt.go          # "prompt" command — displays current system prompt
+│   │   ├── rollback.go        # "rollback" command — restores files modified by the last agent interaction
 │   │   └── sessions.go        # "sessions" command — opens session browser
 │   ├── store/
 │   │   └── store.go           # Session persistence: JSONL file storage in ~/.gocode/sessions/
 │   ├── tools/
-│   │   └── tools.go           # Tool definitions and executors: read, write, edit, bash/powershell
+│   │   ├── tools.go           # Tool definitions and executors: read, write, edit, bash/powershell
+│   │   └── rollback.go        # RollbackTracker: records file modifications for potential rollback
 │   └── tui/
 │       ├── tui.go             # Main TUI model: layout, key handling, update loop
 │       ├── agent.go           # Agent integration: StartAgent, progress handling, persistence
@@ -75,7 +78,7 @@ $env:DEEPSEEK_API_KEY="sk-..."
 go build -o gocode.exe ./cmd/
 ```
 
-Or just run directly:
+Or run directly:
 
 ```bash
 go run ./cmd/
@@ -92,6 +95,8 @@ Type `/` in the input to bring up the command palette:
 - `/new` — Start a new conversation (clears context)
 - `/sessions` — Browse and resume past sessions
 - `/init` — Analyze the project and generate a `AGENTS.md` file at `.gocode/AGENTS.md`
+- `/prompt` — Display the current system prompt
+- `/rollback` — Restore files modified by the last agent interaction (side-effect reversal)
 
 #### Key Bindings
 
@@ -124,7 +129,7 @@ Type `/` in the input to bring up the command palette:
 ### Error Handling
 
 - Tools return descriptive errors with context (e.g., `"read %s: %w"`)
-- API calls retry up to 3 times with exponential backoff
+- API calls retry up to 3 times with 2-second base delay (exponential backoff)
 - Panics are recovered in the agent goroutine and surfaced as error messages
 
 ### Concurrency
@@ -146,15 +151,15 @@ Type `/` in the input to bring up the command palette:
 
 The core of the application. Manages:
 
-- **System prompt**: Auto-generated from available tools and their guidelines. Also loads `AGENTS.md` from the current working directory if present.
-- **Streaming**: Uses OpenAI-compatible streaming API with `reasoning_effort: "max"`. Handles reasoning content and regular content deltas separately.
-- **Tool calling**: Supports native function calling. After receiving tool calls, executes them locally and feeds results back into the conversation.
-- **Retry logic**: Retries failed API calls up to 3 times with 2-second base delay.
-- **History reconstruction**: `ReconstructHistory()` rebuilds OpenAI-format messages from persisted session data so past sessions can be resumed.
+- **System prompt**: Auto-generated from available tools and their guidelines. Also loads `AGENTS.md` from the current working directory (specifically `.gocode/AGENTS.md`) if present.
+- **Streaming**: Uses OpenAI-compatible streaming API with `reasoning_effort: "max"`. Handles reasoning content and regular content deltas separately, emitting incremental `MsgThinkingStream`/`MsgAssistantStream` callbacks and final `MsgThinking`/`MsgAssistant` callbacks.
+- **Tool calling**: Supports native function calling. After receiving tool calls, executes them locally and feeds results back into the conversation loop.
+- **Retry logic**: Retries failed API calls up to 3 times with 2-second base delay. When retrying, emits `MsgError` and `MsgRetryWait` callbacks to inform the user.
+- **History reconstruction**: `ReconstructHistory()` rebuilds OpenAI-format messages from persisted session data (a list of `HistoryMessage` structs) so past sessions can be resumed with full context.
 
 ### `internal/tools` — Tool System
 
-Four tools available to the AI:
+Four tools available to the AI (platform-dependent shell tool):
 
 | Tool | Description | Platform |
 |------|-------------|----------|
@@ -164,11 +169,31 @@ Four tools available to the AI:
 | `bash` | Execute shell commands via bash/sh | Linux/macOS |
 | `powershell` | Execute shell commands via PowerShell | Windows |
 
-Each tool has `PromptSnippet` and `PromptGuidelines` that feed into the system prompt to guide the AI on proper tool usage.
+Each tool implements the `ToolExecutor` interface (`Name()`, `Execute()`, `SetTracker()`). Tool definitions include `PromptSnippet` and `PromptGuidelines` that feed into the auto-generated system prompt to guide the AI on proper tool usage.
+
+#### RollbackTracker
+
+`RollbackTracker` records file modifications and shell commands during each agent interaction. It tracks:
+- **File changes**: Original content before modification, whether the file existed, and deduplicates by path (first write wins)
+- **Shell commands**: All executed commands and their output
+
+The `/rollback` slash command restores modified files to their original state and reports shell commands that were executed (which cannot be automatically rolled back).
 
 ### `internal/command` — Slash Commands
 
-A registry-based command system. Commands implement the `Executor` interface (`Name()`, `Description()`, `Execute()`). The command palette in the TUI uses the registry to filter and execute commands.
+A registry-based command system. Commands implement the `Executor` interface:
+
+```go
+type Executor interface {
+    Name() string
+    Description() string
+    Execute(ctx context.Context, args string, env *Env) (*Result, error)
+}
+```
+
+The `Env` struct provides access to the TUI (via `TUIAccess` interface) for session management, cancellation, and rollback tracker access. The `Result` struct can return a display `Message` and/or an `AgentInput` string that triggers automatic agent invocation (used by `/init`).
+
+Registered commands: `new`, `sessions`, `init`, `prompt`, `rollback`.
 
 ### `internal/store` — Session Persistence
 
@@ -177,38 +202,40 @@ Stores sessions as JSONL files in `~/.gocode/sessions/<sanitized-cwd-path>/`. Ea
 - Line 1: Session metadata (ID, created time, model, CWD, first message)
 - Subsequent lines: Messages (type, content, tool call info, error status)
 
-Thread-safe with mutex. Supports listing, reading, and appending.
+Thread-safe with mutex. Supports listing, reading, and appending. The CWD path is sanitized into a directory name (e.g., `C:\Users\...\myproject` becomes `c-users-...-myproject`).
 
 ### `internal/tui` — Terminal UI
 
 Built with Bubble Tea v2:
 
 - **Model** holds editor (textarea), output (viewport), agent reference, history, palette, session browser
-- **Layout**: Output area on top, optional palette, then input editor at bottom
+- **Layout**: Output area on top (scrollable viewport), optional palette, then input editor at bottom. Editor has a 17-line max height.
 - **Key handling** is layered: session browser → palette → editor — each layer can consume or pass through keys
 - **Rendering**: Uses a dirty-flag pattern in history; only re-renders when content changes
+- **Focus**: Editor has initial focus after launch
 
 #### Sub-packages
 
-- **`compoent/`**: Defines a `Component` interface and concrete types: `UserMessage`, `AssistantMessage`, `ThinkingMessage`, `ToolMessage`, `ErrorMessage`, `SystemMessage`. Each knows how to render itself with lipgloss styles.
-- **`history/`**: In-memory list of components with `Append`, `Upsert` (for streaming updates), `UpdateToolResult`, and dirty-flag-based `Render`.
-- **`palette/`**: Slash-command palette that appears when typing `/`. Supports filtering, keyboard navigation, tab completion, and enter-to-execute.
-- **`sessionbrowser/`**: A list-based modal for browsing past sessions. Uses a custom `list.Item` delegate for rendering session items with timestamps and first-message previews.
+- **`compoent/`**: Defines a `Component` interface (`Type()`, `MsgID()`, `Content()`, `Render()`, `SetContent()`) and concrete types: `UserMessage`, `AssistantMessage`, `ThinkingMessage`, `ToolMessage`, `ErrorMessage`, `SystemMessage`. Each has a render cache with dirty-flag that only recalculates when content or width changes. Tool messages show a formatted first line (path/command) and up to 6 lines of result, with green styling for success and red for errors.
+- **`history/`**: In-memory list of components with `Append` (add new), `Upsert` (update-or-insert by MsgID for streaming updates), `UpdateToolResult` (set tool result on an existing ToolMessage), and dirty-flag-based `Render` that returns line strings only when dirty.
+- **`palette/`**: Slash-command palette that appears when typing `/`. Supports filtering by name prefix, keyboard navigation (up/down), tab completion (auto-fills command name), and enter-to-execute. Renders up to 7 visible rows with highlight on selected item.
+- **`sessionbrowser/`**: A list-based modal for browsing past sessions. Uses a custom `list.Item` delegate for rendering session items with timestamps and first-message previews. Supports selection via Enter to load a session.
 
 ## Notes and Special Conventions
 
 ### AGENTS.md Auto-Loading
 
-The agent automatically looks for an `AGENTS.md` file in the current working directory and appends its content to the system prompt. This is how the AI gets project-specific context. The `/init` command can generate this file by asking the AI to analyze the project.
+The agent automatically looks for `.gocode/AGENTS.md` in the current working directory and appends its content to the system prompt. This is how the AI gets project-specific context. The `/init` command can generate this file by asking the AI to analyze the project.
 
 ### Session Storage Location
 
-Sessions are stored under `~/.gocode/sessions/` with the CWD path sanitized into a directory name. For example, working in `/home/user/myproject` stores sessions in `~/.gocode/sessions/home-user-myproject/`.
+Sessions are stored under `~/.gocode/sessions/` with the CWD path sanitized into a directory name. For example, working in `C:\Users\LGZ\IdeaProjects\gocode` stores sessions in `~/.gocode/sessions/C-Users-LGZ-IdeaProjects-gocode/`.
 
 ### Platform Awareness
 
 - On Windows, the `powershell` tool is registered; on Linux/macOS, `bash` is registered
 - PowerShell commands use `;` instead of `&&` for chaining
+- PowerShell commands are wrapped with `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8;` to handle Unicode
 - The system prompt includes the current OS name
 
 ### Streaming Updates
@@ -217,9 +244,17 @@ Content is streamed incrementally. The TUI uses `Upsert` (update-or-insert) for 
 
 ### Tool Call Flow
 
-1. AI requests tool calls in its response
-2. Agent emits `MsgToolCall` for each call
-3. Tool is executed locally
-4. Result is emitted as `MsgToolResult`
+1. AI requests tool calls in its response (in parallel or sequentially)
+2. Agent emits `MsgToolCall` for each call (with a unique ID)
+3. Tool is executed locally via `ToolExecutor.Execute()`
+4. Result is emitted as `MsgToolResult` (linked by ID), with error flag if the tool failed or returned non-zero exit code
 5. Results are fed back to the API for the next turn
 6. Loop continues until the AI produces a final text response (no more tool calls)
+
+### Rollback Flow
+
+1. Each agent interaction creates a fresh `RollbackTracker`
+2. `write` and `edit` tools record original file state before modifying
+3. Shell tools record the command and output
+4. The user can invoke `/rollback` to restore files and review shell commands
+5. After rollback or starting a new agent interaction, the tracker is cleared
