@@ -20,6 +20,7 @@ type TUIAccess interface {
 	CancelAgent()
 	NewSession()
 	OpenSessionBrowser()
+	SystemPrompt() string
 }
 
 type Result struct {

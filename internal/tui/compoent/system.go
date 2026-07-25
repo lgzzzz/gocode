@@ -1,5 +1,7 @@
 package compoent
 
+import "strings"
+
 type SystemMessage struct {
 	content     string
 	renderCache string
@@ -23,7 +25,7 @@ func (m *SystemMessage) SetContent(content string) {
 	}
 	m.content = content
 	if m.renderWidth > 0 {
-		m.renderCache = renderTrim(systemStyle, m.renderWidth-1, content)
+		m.renderCache = renderTrim(systemStyle, m.renderWidth-1, strings.TrimSpace(content))
 	} else {
 		m.dirty = true
 	}

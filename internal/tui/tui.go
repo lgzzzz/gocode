@@ -63,6 +63,7 @@ func NewModel(ag *agent.Agent, st *store.Store) tea.Model {
 	reg.Register(&command.NewCommand{})
 	reg.Register(&command.SessionsCommand{})
 	reg.Register(&command.InitCommand{})
+	reg.Register(&command.PromptCommand{})
 
 	cwd, _ := os.Getwd()
 	sessionID := store.NewSessionID()

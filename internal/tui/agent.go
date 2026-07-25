@@ -50,6 +50,8 @@ func (m *model) StartAgent(input string) tea.Cmd {
 
 func (m *model) Running() bool { return m.running }
 
+func (m *model) SystemPrompt() string { return m.agent.SystemPrompt() }
+
 func (m *model) CancelAgent() { m.cancelAgent() }
 
 func (m *model) cancelAgent() {

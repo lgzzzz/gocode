@@ -448,9 +448,9 @@ func (a *Agent) systemPrompt() string {
 
 	projectPrompt := a.buildAgentsMDPrompt()
 	if projectPrompt != "" {
-		return prompt + "\n" + projectPrompt
+		return strings.TrimSpace(prompt + "\n" + projectPrompt)
 	}
-	return prompt
+	return strings.TrimSpace(prompt)
 }
 
 func (a *Agent) buildToolsPrompt() string {
@@ -493,7 +493,7 @@ func (a *Agent) buildGuidelinesPrompt() string {
 // loadAgentsMD looks for an AGENTS.md file in the given directory.
 // Returns the file content as a string, or empty string if not found.
 func loadAgentsMD(cwd string) string {
-	path := filepath.Join(cwd, "AGENTS.md")
+	path := filepath.Join(cwd, ".gocode", "AGENTS.md")
 	data, err := os.ReadFile(path)
 	if err == nil {
 		return string(data)
@@ -506,7 +506,6 @@ func (a *Agent) buildAgentsMDPrompt() string {
 	if content == "" {
 		return ""
 	}
-
 	return content
 }
 
