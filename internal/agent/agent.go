@@ -364,6 +364,9 @@ func (a *Agent) SetContextMessage(contextMessages []goopenai.ChatCompletionMessa
 }
 
 func (a *Agent) SystemPrompt() string {
+	if len(a.contextMessages) > 0 && a.contextMessages[0].Role == goopenai.ChatMessageRoleSystem {
+		return a.contextMessages[0].Content
+	}
 	return a.systemPrompt()
 }
 
