@@ -47,17 +47,16 @@ func (m *AssistantMessage) Render(width int) string {
 // terminal output using glamour, then prepends the assistant bar prefix
 // to each line.
 func (m *AssistantMessage) renderMarkdown(width int) string {
-	if strings.TrimSpace(m.content) == "" {
+	content := strings.TrimSpace(m.content)
+	if content == "" {
 		return ""
 	}
 
-	renderWidth := width - 2
-
-	renderer := markdown.MarkdownRenderer(renderWidth)
+	renderer := markdown.MarkdownRenderer(width)
 	defer renderer.Close()
-	out, err := renderer.Render(m.content)
+	out, err := renderer.Render(content)
 	if err != nil {
-		return renderTrim(assistantStyle, width, m.content)
+		return renderTrim(assistantStyle, width, content)
 	}
 
 	return renderTrim(assistantStyle, width, out)

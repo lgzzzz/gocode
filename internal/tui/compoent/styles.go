@@ -25,12 +25,9 @@ var (
 	userStyle = leftBar("15").
 			Foreground(lipgloss.Color("15"))
 
-	assistantStyle = leftBar("12").
-			Foreground(lipgloss.Color("15"))
+	assistantStyle = leftBar("12")
 
-	thinkingStyle = leftBar("13").
-			Foreground(lipgloss.Color("13")).
-			Italic(true)
+	thinkingStyle = leftBar("13")
 
 	toolStyle = leftBar("10").
 			Foreground(lipgloss.Color("10"))

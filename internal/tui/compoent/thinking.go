@@ -47,17 +47,16 @@ func (m *ThinkingMessage) Render(width int) string {
 // terminal output using glamour (quiet mode, no colors), then prepends
 // the thinking bar prefix to each line.
 func (m *ThinkingMessage) renderMarkdown(width int) string {
-	if strings.TrimSpace(m.content) == "" {
+	content := strings.TrimSpace(m.content)
+	if content == "" {
 		return ""
 	}
 
-	renderWidth := width - 2
-
-	renderer := markdown.MarkdownRenderer(renderWidth)
+	renderer := markdown.MarkdownRenderer(width)
 	defer renderer.Close()
-	out, err := renderer.Render(m.content)
+	out, err := renderer.Render(content)
 	if err != nil {
-		return renderTrim(thinkingStyle, width, m.content)
+		return renderTrim(thinkingStyle, width, content)
 	}
 
 	return renderTrim(thinkingStyle, width, out)
