@@ -57,9 +57,8 @@ func (m *AssistantMessage) renderMarkdown(width int) string {
 	defer renderer.Close()
 	out, err := renderer.Render(m.content)
 	if err != nil {
-		return renderTrimWithPrefix(assistantBar, width, m.content)
+		return renderTrim(assistantStyle, width, m.content)
 	}
 
-	out = strings.TrimSuffix(out, "\n")
-	return prefixLines(assistantBar, out)
+	return renderTrim(assistantStyle, width, out)
 }

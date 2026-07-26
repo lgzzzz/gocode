@@ -57,9 +57,8 @@ func (m *ThinkingMessage) renderMarkdown(width int) string {
 	defer renderer.Close()
 	out, err := renderer.Render(m.content)
 	if err != nil {
-		return renderTrimWithPrefix(thinkingBar, width, m.content)
+		return renderTrim(thinkingStyle, width, m.content)
 	}
 
-	out = strings.TrimSuffix(out, "\n")
-	return prefixLines(thinkingBar, out)
+	return renderTrim(thinkingStyle, width, out)
 }
