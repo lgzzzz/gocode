@@ -19,21 +19,9 @@ var darkCompactConfig = func() ansi.StyleConfig {
 		},
 		Heading: ansi.StyleBlock{
 			StylePrimitive: ansi.StylePrimitive{
-				Color: new("39"),
-				Bold:  new(true),
-			},
-		},
-		H1: ansi.StyleBlock{
-			StylePrimitive: ansi.StylePrimitive{
-				Color:           new("228"),
-				BackgroundColor: new("63"),
-				Bold:            new(true),
-			},
-		},
-		H6: ansi.StyleBlock{
-			StylePrimitive: ansi.StylePrimitive{
-				Color: new("35"),
-				Bold:  new(false),
+				Color:       new("39"),
+				Bold:        new(true),
+				BlockSuffix: "\n",
 			},
 		},
 		Strikethrough: ansi.StylePrimitive{
@@ -74,6 +62,7 @@ var darkCompactConfig = func() ansi.StyleConfig {
 		},
 		Code: ansi.StyleBlock{
 			StylePrimitive: ansi.StylePrimitive{
+				Color:           new("215"),
 				BackgroundColor: new("236"),
 			},
 		},
