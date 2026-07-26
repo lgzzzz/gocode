@@ -59,5 +59,5 @@ func (m *AssistantMessage) renderMarkdown(width int) string {
 		return renderTrim(assistantStyle, width, content)
 	}
 
-	return renderTrim(assistantStyle, width, out)
+	return renderTrim(assistantStyle, width, strings.TrimSpace(out))
 }

@@ -59,5 +59,5 @@ func (m *ThinkingMessage) renderMarkdown(width int) string {
 		return renderTrim(thinkingStyle, width, content)
 	}
 
-	return renderTrim(thinkingStyle, width, out)
+	return renderTrim(thinkingStyle, width, strings.TrimSpace(out))
 }
