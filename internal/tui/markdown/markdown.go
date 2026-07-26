@@ -81,31 +81,7 @@ func DefaultStyles() MarkdownStyleConfig {
 	}
 }
 
-// MarkdownRenderer returns a glamour TermRenderer configured with the
-// given styles and width. Renderers are memoized per width and shared
-// across callers.
-//
-// The returned renderer is NOT safe for concurrent Render calls
-// (goldmark's BlockStack carries state across the public Render API).
-// The TUI is single-threaded so this is safe in production.
 func MarkdownRenderer(cfg MarkdownStyleConfig, width int) *glamour.TermRenderer {
-	mdCacheMu.Lock()
-	defer mdCacheMu.Unlock()
-	if r, ok := mdCache[width]; ok {
-		return r
-	}
-	r, _ := glamour.NewTermRenderer(
-		glamour.WithStyles(buildGlamourStyle(cfg)),
-		glamour.WithWordWrap(width),
-		glamour.WithChromaFormatter(formatterName),
-	)
-	mdCache[width] = r
-	return r
-}
-
-// QuietMarkdownRenderer returns a glamour TermRenderer with no colors
-// (plain text with structure) for rendering thinking/reasoning content.
-func QuietMarkdownRenderer(cfg MarkdownStyleConfig, width int) *glamour.TermRenderer {
 	mdCacheMu.Lock()
 	defer mdCacheMu.Unlock()
 	if r, ok := quietMDCache[width]; ok {
