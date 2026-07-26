@@ -286,7 +286,7 @@ func AllTools() (map[string]ToolExecutor, []ToolDef) {
 		{
 			Name:             "read",
 			Description:      "Read contents of a text file. Returns file content as text.",
-			PromptSnippet:    "Read file contents",
+			PromptSnippet:    "Read file contents.",
 			PromptGuidelines: []string{"Use read to examine files instead of cat or sed."},
 			Parameters: map[string]any{
 				"type": "object",
@@ -301,8 +301,8 @@ func AllTools() (map[string]ToolExecutor, []ToolDef) {
 		{
 			Name:             "write",
 			Description:      "Create or overwrite a file with the given content. Creates parent directories as needed.",
-			PromptSnippet:    "Create or overwrite files",
-			PromptGuidelines: []string{"Use write only for new files or complete rewrites"},
+			PromptSnippet:    "Create or overwrite files.",
+			PromptGuidelines: []string{"Use write only for new files or complete rewrites."},
 			Parameters: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
@@ -315,10 +315,10 @@ func AllTools() (map[string]ToolExecutor, []ToolDef) {
 		{
 			Name:          "edit",
 			Description:   "Edit a file by replacing an exact text match with new text. oldText must be unique in the file.",
-			PromptSnippet: "Make precise text replacements in files",
+			PromptSnippet: "Make precise text replacements in files.",
 			PromptGuidelines: []string{
-				"Use edit for precise, small changes; use write only for new files or complete rewrites",
-				"When edit fails because oldText is not unique, read the file around the target area and try again with more context",
+				"Use edit for precise, small changes; use write only for new files or complete rewrites.",
+				"When edit fails because oldText is not unique, read the file around the target area and try again with more context.",
 			},
 			Parameters: map[string]any{
 				"type": "object",
@@ -336,7 +336,10 @@ func AllTools() (map[string]ToolExecutor, []ToolDef) {
 		defs = append(defs, ToolDef{
 			Name:          "powershell",
 			Description:   "Execute a shell command on Windows systems. Runs via PowerShell. Returns stdout and stderr combined.",
-			PromptSnippet: "Execute shell commands on Windows systems. PowerShell uses `;` instead of `&&`.",
+			PromptSnippet: "Execute shell commands on Windows systems.",
+			PromptGuidelines: []string{
+				"PowerShell uses `;` instead of `&&`.",
+			},
 			Parameters: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
@@ -350,7 +353,7 @@ func AllTools() (map[string]ToolExecutor, []ToolDef) {
 		defs = append(defs, ToolDef{
 			Name:          "bash",
 			Description:   "Execute a shell command on Linux/Unix systems. Runs via bash. Returns stdout and stderr combined.",
-			PromptSnippet: "Execute shell commands on Linux/Unix systems",
+			PromptSnippet: "Execute shell commands on Linux/Unix systems.",
 			Parameters: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
