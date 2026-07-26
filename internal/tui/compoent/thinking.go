@@ -1,6 +1,11 @@
 package compoent
 
-import "github.com/lgzzzz/gocode/internal/agent"
+import (
+	"strings"
+
+	"github.com/lgzzzz/gocode/internal/agent"
+	"github.com/lgzzzz/gocode/internal/tui/markdown"
+)
 
 type ThinkingMessage struct {
 	id          string
@@ -25,11 +30,7 @@ func (m *ThinkingMessage) SetContent(content string) {
 		return
 	}
 	m.content = content
-	if m.renderWidth > 0 {
-		m.renderCache = renderTrim(thinkingStyle, m.renderWidth-1, content)
-	} else {
-		m.dirty = true
-	}
+	m.dirty = true
 }
 
 func (m *ThinkingMessage) Render(width int) string {
@@ -37,7 +38,27 @@ func (m *ThinkingMessage) Render(width int) string {
 		return m.renderCache
 	}
 	m.renderWidth = width
-	m.renderCache = renderTrim(thinkingStyle, width-1, m.content)
+	m.renderCache = m.renderMarkdown(width)
 	m.dirty = false
 	return m.renderCache
+}
+
+// renderMarkdown converts the thinking content from markdown to styled
+// terminal output using glamour (quiet mode, no colors), then prepends
+// the thinking bar prefix to each line.
+func (m *ThinkingMessage) renderMarkdown(width int) string {
+	if strings.TrimSpace(m.content) == "" {
+		return ""
+	}
+
+	renderWidth := width - 2
+
+	renderer := markdown.QuietMarkdownRenderer(mdConfig, renderWidth)
+	out, err := renderer.Render(m.content)
+	if err != nil {
+		return renderTrimWithPrefix(thinkingBar, width, m.content)
+	}
+
+	out = strings.TrimSuffix(out, "\n")
+	return prefixLines(thinkingBar, out)
 }
