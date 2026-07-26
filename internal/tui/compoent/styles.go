@@ -4,7 +4,6 @@ import (
 	"strings"
 
 	"charm.land/lipgloss/v2"
-	"github.com/lgzzzz/gocode/internal/tui/markdown"
 )
 
 func renderTrim(style lipgloss.Style, width int, content string) string {
@@ -48,11 +47,6 @@ func renderTrimWithPrefix(prefix string, width int, content string) string {
 	return prefixLines(prefix, strings.TrimSpace(wrapped))
 }
 
-// shared markdown config (can be customized later)
-var mdConfig = markdown.DefaultStyles()
-
-// Bar prefix styles — we render these once and prepend to every line,
-// which avoids lipgloss BorderLeft edge cases with ANSI-markup content.
 var (
 	assistantBar = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("12")).
