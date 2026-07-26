@@ -469,9 +469,8 @@ Available tools:
 
 Guidelines:
 {{Guidelines}}
-
-Be concise in your responses.
-Show file paths clearly when working with files.
+- Be concise in your responses.
+- Show file paths clearly when working with files.
 
 Current working directory: {{CWD}}
 Current environment: {{OS}}
