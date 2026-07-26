@@ -1,16 +1,11 @@
 package compoent
 
 import (
-	"strings"
-
 	"charm.land/lipgloss/v2"
 )
 
 func renderTrim(style lipgloss.Style, width int, content string) string {
-	if strings.TrimSpace(content) == "" {
-		return ""
-	}
-	return strings.TrimSpace(style.Width(width).Render(content))
+	return style.Width(width).Render(content)
 }
 
 func leftBar(hexColor string) lipgloss.Style {
