@@ -10,10 +10,6 @@ import (
 var darkCompactConfig = styles.DraculaStyleConfig
 
 func init() {
-	// Dim the body text from bright white (#f8f8f2) to a softer gray
-	darkCompactConfig.Document.Color = new("#bbbbbb")
-
-	// Remove all margins and heading prefixes for compact display
 	darkCompactConfig.Document.Margin = new(uint(0))
 	darkCompactConfig.H1.BlockPrefix = ""
 	darkCompactConfig.H2.BlockPrefix = ""
