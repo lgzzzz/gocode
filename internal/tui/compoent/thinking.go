@@ -52,7 +52,7 @@ func (m *ThinkingMessage) renderMarkdown(width int) string {
 		return ""
 	}
 
-	renderer := markdown.MarkdownRenderer(width)
+	renderer := markdown.MarkdownRenderer(width - 2)
 	defer renderer.Close()
 	out, err := renderer.Render(content)
 	if err != nil {
