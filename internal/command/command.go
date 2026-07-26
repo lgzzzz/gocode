@@ -25,6 +25,7 @@ type TUIAccess interface {
 	SystemPrompt() string
 	RollbackTracker() *tools.RollbackTracker
 	RollbackConversation() (rollBacked bool)
+	SetSkipAgentsMD(skip bool)
 }
 
 type Result struct {

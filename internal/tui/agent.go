@@ -56,6 +56,8 @@ func (m *model) SystemPrompt() string { return m.agent.SystemPrompt() }
 
 func (m *model) CancelAgent() { m.cancelAgent() }
 
+func (m *model) SetSkipAgentsMD(skip bool) { m.agent.SetSkipAgentsMD(skip) }
+
 func (m *model) RollbackTracker() *tools.RollbackTracker { return m.rollbackTracker }
 
 // RollbackConversation truncates the agent context, TUI history, and persisted store messages

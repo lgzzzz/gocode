@@ -28,6 +28,9 @@ func (c *InitCommand) Execute(ctx context.Context, args string, env *Env) (*Resu
 	if env.TUI.Running() {
 		env.TUI.CancelAgent()
 	}
+	// Skip loading existing AGENTS.md into the system prompt, since the
+	// init command's purpose is to generate a fresh AGENTS.md from scratch.
+	env.TUI.SetSkipAgentsMD(true)
 	env.TUI.NewSession()
 	return &Result{
 		Message:    "Analyzing project and generating AGENTS.md ...",

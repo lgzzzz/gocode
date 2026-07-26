@@ -60,6 +60,7 @@ type Agent struct {
 	cwd             string
 	contextMessages []goopenai.ChatCompletionMessage
 	logger          Logger
+	skipAgentsMD    bool
 }
 
 func New(apiKey, model, baseURL string) *Agent {
@@ -103,6 +104,9 @@ func (a *Agent) Run(ctx context.Context, userMessage string, cb func(CallbackMsg
 		a.contextMessages = []goopenai.ChatCompletionMessage{
 			sysMsg(a.systemPrompt()),
 		}
+		// Reset skipAgentsMD after the system prompt is built, so the flag
+		// only affects the current Run() invocation.
+		a.skipAgentsMD = false
 	}
 
 	a.contextMessages = append(a.contextMessages, userMsg(userMessage))
@@ -312,6 +316,14 @@ type toolCallAccum struct {
 
 func (a *Agent) Model() string { return a.model }
 
+// SetSkipAgentsMD controls whether the project's AGENTS.md context
+// is included in the system prompt. When true, the AGENTS.md file
+// will not be loaded. The flag is automatically reset to false
+// after the system prompt is built in Run().
+func (a *Agent) SetSkipAgentsMD(skip bool) {
+	a.skipAgentsMD = skip
+}
+
 func (a *Agent) SetLogger(l Logger) {
 	if l == nil {
 		l = nopLogger{}
@@ -470,9 +482,11 @@ func (a *Agent) systemPrompt() string {
 	prompt = strings.Replace(prompt, "{{CWD}}", a.cwd, 1)
 	prompt = strings.Replace(prompt, "{{OS}}", osName(), 1)
 
-	projectPrompt := a.buildAgentsMDPrompt()
-	if projectPrompt != "" {
-		return strings.TrimSpace(prompt + "\n" + projectPrompt)
+	if !a.skipAgentsMD {
+		projectPrompt := a.buildAgentsMDPrompt()
+		if projectPrompt != "" {
+			return strings.TrimSpace(prompt + "\n" + projectPrompt)
+		}
 	}
 	return strings.TrimSpace(prompt)
 }
