@@ -11,6 +11,7 @@ import (
 func (m *model) NewSession() {
 	m.agent.ClearContextMessage()
 	m.history.Clear()
+	m.rollbackTracker.Clear()
 	m.sessionID = store.NewSessionID()
 	m.cwd, _ = os.Getwd()
 }

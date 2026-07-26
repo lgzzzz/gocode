@@ -28,6 +28,7 @@ func (c *InitCommand) Execute(ctx context.Context, args string, env *Env) (*Resu
 	if env.TUI.Running() {
 		env.TUI.CancelAgent()
 	}
+	env.TUI.NewSession()
 	return &Result{
 		Message:    "Analyzing project and generating AGENTS.md ...",
 		AgentInput: initPrompt,

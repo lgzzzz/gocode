@@ -12,6 +12,5 @@ func (c *NewCommand) Execute(ctx context.Context, args string, env *Env) (*Resul
 		env.TUI.CancelAgent()
 	}
 	env.TUI.NewSession()
-	env.TUI.CancelAgent()
 	return &Result{Message: "New conversation started, context cleared."}, nil
 }

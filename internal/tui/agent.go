@@ -67,6 +67,7 @@ func (m *model) RollbackConversation() (rollBacked bool) {
 	if m.store != nil {
 		storeRollBacked = m.store.TruncateMessagesFromLastUser(m.sessionID)
 	}
+	m.rollbackTracker.Clear()
 	if ctxRollBacked != 0 || historyRollBacked != 0 || storeRollBacked != 0 {
 		return true
 	}
