@@ -1,270 +1,181 @@
-# GoCode - AI Coding Agent
+# GoCode — Project Overview
 
-## Project Overview
+**GoCode** is an interactive terminal-based AI coding assistant (TUI) written in Go. It connects to the **DeepSeek API** (OpenAI-compatible) to provide a conversational agent that can read, write, and edit files, execute shell commands, and maintain context across sessions — all from within your terminal.
 
-**GoCode** is a terminal-based AI coding assistant written in Go. It provides an interactive TUI (Terminal User Interface) that connects to the DeepSeek API to help developers read files, execute shell commands, edit code, and write new files — all through natural language conversation.
+- **Language:** Go 1.26
+- **TUI framework:** Bubble Tea v2 + Lipgloss v2
+- **AI backend:** DeepSeek API via `go-openai`
+- **Platform:** Windows (primary), with Linux/macOS cross-platform support
 
-- **Language**: Go 1.26
-- **Module path**: `github.com/lgzzzz/gocode`
-- **LLM Backend**: DeepSeek API (OpenAI-compatible), using `deepseek-v4-pro` model
-- **TUI Framework**: [Bubble Tea v2](https://github.com/charmbracelet/bubbletea) (`charm.land/bubbletea/v2`)
-- **Styling**: [Lipgloss v2](https://github.com/charmbracelet/lipgloss) (`charm.land/lipgloss/v2`)
-- **API Client**: `github.com/sashabaranov/go-openai`
+---
 
 ## Directory Structure
 
 ```
 gocode/
 ├── cmd/
-│   └── gocode.go              # Main entry point: sets up env, store, agent, and TUI
+│   └── gocode.go              # Application entry point
 ├── internal/
 │   ├── agent/
-│   │   └── agent.go           # Core AI agent: streaming, tool calling, system prompt, history reconstruction
+│   │   └── agent.go           # LLM agent: streaming, system prompt, context, tool orchestration
 │   ├── command/
-│   │   ├── command.go         # Command registry and Executor interface
-│   │   ├── init.go            # "init" command — triggers AGENTS.md generation
-│   │   ├── new.go             # "new" command — starts a fresh conversation
-│   │   ├── prompt.go          # "prompt" command — displays current system prompt
-│   │   ├── rollback.go        # "rollback" command — restores files modified by the last agent interaction
-│   │   └── sessions.go        # "sessions" command — opens session browser
+│   │   ├── command.go         # Command executor interface & registry
+│   │   ├── init.go            # /init — generate AGENTS.md
+│   │   ├── new.go             # /new  — start a new conversation
+│   │   ├── prompt.go          # /prompt — display the current system prompt
+│   │   ├── rollback.go        # /rollback — revert file changes from the last interaction
+│   │   └── sessions.go        # /sessions — browse and continue previous sessions
 │   ├── store/
-│   │   └── store.go           # Session persistence: JSONL file storage in ~/.gocode/sessions/
+│   │   └── store.go           # Session & message persistence (JSONL file store)
 │   ├── tools/
-│   │   ├── tools.go           # Tool definitions and executors: read, write, edit, bash/powershell
-│   │   └── rollback.go        # RollbackTracker: records file modifications for potential rollback
+│   │   ├── tools.go           # Tool definitions: read, write, edit, bash/powershell
+│   │   └── rollback.go        # Rollback tracker: records file/shell side effects for undo
 │   └── tui/
-│       ├── tui.go             # Main TUI model: layout, key handling, update loop
-│       ├── agent.go           # Agent integration: StartAgent, progress handling, persistence
-│       ├── editor.go          # Input textarea updates
-│       ├── output.go          # Output viewport rendering
-│       ├── session.go         # Session management: New, Load, OpenBrowser, CloseBrowser
-│       ├── stream.go          # Stream message types and waitCmd helper
-│       ├── styles.go          # Shared lipgloss styles
-│       ├── compoent/          # Message component types (user, assistant, thinking, tool, error, system)
-│       ├── history/           # In-memory message history with dirty-flag rendering
-│       ├── palette/           # Slash-command palette UI
-│       └── sessionbrowser/    # Session browser/list for loading past sessions
+│       ├── tui.go             # Main TUI model (Bubble Tea)
+│       ├── agent.go           # Agent ↔ TUI bridge (goroutine + channel)
+│       ├── editor.go          # Text input area wrapper
+│       ├── output.go          # Scrollable output viewport
+│       ├── session.go         # Session lifecycle: new, load, browser
+│       ├── stream.go          # Streaming progress messages from agent
+│       ├── styles.go          # Shared TUI styles
+│       ├── compoent/          # TUI component types (renderable message blocks)
+│       │   ├── component.go   # Component interface
+│       │   ├── assistant.go   # Assistant message block
+│       │   ├── user.go        # User message block
+│       │   ├── thinking.go    # LLM reasoning/thinking block
+│       │   ├── tool.go        # Tool call / result block
+│       │   ├── error.go       # Error message block
+│       │   ├── system.go      # System message block
+│       │   └── styles.go      # Component-specific lipgloss styles
+│       ├── history/
+│       │   └── history.go     # Ordered message list with upsert & truncation
+│       ├── palette/
+│       │   └── palette.go     # Slash-command palette UI
+│       └── sessionbrowser/
+│           └── sessionbrowser.go  # Session picker modal
+├── .gocode/
+│   └── AGENTS.md              # This file (auto-loaded as additional system prompt context)
 ├── go.mod
 ├── go.sum
-├── .gitignore
-└── .gocode/
-    └── AGENTS.md              # This file — project documentation for AI assistants
+└── .gitignore
 ```
 
-## Build and Run
+---
+
+## Build & Run
 
 ### Prerequisites
 
-- Go 1.26+
-- A DeepSeek API key
+- Go 1.26 or later
+- A DeepSeek API key set as the environment variable `DEEPSEEK_API_KEY`
 
-### Environment
-
-Set the API key before running:
+### Run (development)
 
 ```bash
 export DEEPSEEK_API_KEY=sk-...
-```
-
-On Windows (PowerShell):
-
-```powershell
-$env:DEEPSEEK_API_KEY="sk-..."
+go run ./cmd/gocode.go
 ```
 
 ### Build
 
 ```bash
-go build -o gocode.exe ./cmd/
+go build -o gocode ./cmd/gocode.go
 ```
 
-Or run directly:
+### Test
 
-```bash
-go run ./cmd/
-```
+There is currently no dedicated test suite. Manual verification is done by running the TUI and interacting with the agent.
 
-### Usage
+---
 
-Launch the binary. The TUI shows a chat interface where you type messages and the AI assistant responds. The assistant has access to tools for reading files, writing files, editing files, and running shell commands.
+## Coding Standards & Conventions
 
-#### Slash Commands
+### General
+- **Language:** All identifiers, comments, and documentation use **English**.
+- **Package naming:** Lowercase, single-word where possible (`agent`, `command`, `tools`, `store`, `tui`).
+- **File naming:** Lowercase with underscores only when necessary (`sessionbrowser.go`).
+- **Error handling:** Errors are returned as values and handled explicitly. The agent reports errors via `CallbackMsg` with type `MsgError`; tools return errors as formatted strings.
 
-Type `/` in the input to bring up the command palette:
+### Naming Conventions
+- **Exported types/functions:** PascalCase (`NewModel`, `CallbackMsg`, `RollbackTracker`).
+- **Unexported types/functions:** camelCase (`sysMsg`, `userMsg`, `loadAgentsMD`, `renderTrim`).
+- **Interfaces:** Suffix `-er` when describing a capability (`ToolExecutor`, `TUIAccess`, `Executor`).
 
-- `/new` — Start a new conversation (clears context)
-- `/sessions` — Browse and resume past sessions
-- `/init` — Analyze the project and generate a `AGENTS.md` file at `.gocode/AGENTS.md`
-- `/prompt` — Display the current system prompt
-- `/rollback` — Restore files modified by the last agent interaction and roll back the conversation context
+### Code Organization
+- **`internal/`** contains all application logic; nothing outside `internal/` is importable by other modules.
+- **TUI components** implement the `Component` interface (from `internal/tui/compoent/component.go`) with `Type()`, `MsgID()`, `Content()`, `Render()`, and `SetContent()`.
+- **Tools** implement `ToolExecutor` (from `internal/tools/tools.go`) with `Name()`, `Execute()`, and `SetTracker()`.
+- **Commands** implement `command.Executor` with `Name()`, `Description()`, and `Execute()`.
 
-#### Key Bindings
+### Style
+- Lipgloss styles are defined in a single `var` block per package (see `styles.go` files).
+- Message types are string constants defined in `agent.MsgType`.
+- Rendering uses a lazy caching pattern: components cache rendered output and only re-render when `dirty` is true or the width changes.
 
-- `Enter` — Submit input
-- `Shift+Tab` — Insert newline in the editor
-- `Esc` — Cancel a running agent request
-- `Ctrl+C` — Quit the application
-- `Up/Down` — Navigate in command palette; `Tab` to autocomplete
-- `PgUp/PgDown` — Scroll output
+---
 
-## Coding Standards and Conventions
-
-### Go Conventions
-
-- Follow standard Go naming conventions (camelCase for unexported, PascalCase for exported)
-- All internal packages are under `internal/` to prevent external import
-- Interfaces are small and purpose-specific (`ToolExecutor`, `Logger`, `TUIAccess`, `Component`)
-- Use `interface{}` only where necessary; prefer typed structs
-- Export only what is needed across packages
-
-### Package Organization
-
-- **`cmd/`**: Single `main` package — wire up dependencies and start the program
-- **`internal/agent/`**: Pure AI logic — no UI dependencies; works with callbacks
-- **`internal/tools/`**: Tool implementations with JSON-parameter parsing, platform-aware (Windows vs Unix)
-- **`internal/command/`**: Slash-command pattern with a `Registry` for dynamic dispatch
-- **`internal/store/`**: Thread-safe session persistence using JSONL (one JSON per line)
-- **`internal/tui/`**: Bubble Tea model; sub-packages for components, history, palette, and session browser
-
-### Error Handling
-
-- Tools return descriptive errors with context (e.g., `"read %s: %w"`)
-- API calls retry up to 3 times with 2-second base delay (exponential backoff)
-- Panics are recovered in the agent goroutine and surfaced as error messages
-
-### Concurrency
-
-- The agent runs in a separate goroutine, communicating via a channel of `progressMsg`
-- The store uses a `sync.Mutex` to guard concurrent access
-- Context-based cancellation is used to stop agent execution
-
-## Key Module Descriptions
+## Key Modules
 
 ### `cmd/gocode.go` — Entry Point
+Reads `DEEPSEEK_API_KEY` from the environment, initializes the session store, creates the agent with the DeepSeek model (`deepseek-v4-pro`), and launches the Bubble Tea TUI program.
 
-- Reads `DEEPSEEK_API_KEY` from environment
-- Opens the session store (defaults to `~/.gocode/sessions/<cwd-path>/`)
-- Creates the agent with model `deepseek-v4-pro` and base URL `https://api.deepseek.com`
-- Starts the Bubble Tea TUI program
-
-### `internal/agent` — AI Agent
-
-The core of the application. Manages:
-
-- **System prompt**: Auto-generated from available tools and their guidelines. Also loads `AGENTS.md` from the current working directory (specifically `.gocode/AGENTS.md`) if present.
-- **Streaming**: Uses OpenAI-compatible streaming API with `reasoning_effort: "max"`. Handles reasoning content and regular content deltas separately, emitting incremental `MsgThinkingStream`/`MsgAssistantStream` callbacks and final `MsgThinking`/`MsgAssistant` callbacks.
-- **Tool calling**: Supports native function calling. After receiving tool calls, executes them locally and feeds results back into the conversation loop.
-- **Retry logic**: Retries failed API calls up to 3 times with 2-second base delay. When retrying, emits `MsgError` and `MsgRetryWait` callbacks to inform the user.
-- **History reconstruction**: `ReconstructHistory()` rebuilds OpenAI-format messages from persisted session data (a list of `HistoryMessage` structs) so past sessions can be resumed with full context.
-- **Context truncation**: `TruncateContextFromLastUser()` removes the last user message and all subsequent messages for rollback purposes. `ClearContextMessage()` resets the entire context.
+### `internal/agent` — LLM Agent
+Core agent that communicates with the DeepSeek API. Key responsibilities:
+- **System prompt construction:** Dynamically builds a system prompt that includes available tool descriptions, usage guidelines, the current working directory, OS information, and optionally the contents of `.gocode/AGENTS.md`.
+- **Streaming:** Uses OpenAI-compatible streaming API; emits incremental `CallbackMsg` events for real-time UI updates (thinking stream, assistant stream, tool calls, tool results).
+- **Context management:** Maintains conversation history (`contextMessages`), supports truncation from the last user message, and context reconstruction from stored history.
+- **Retry logic:** Automatically retries failed API calls up to 3 times with a 2-second backoff.
+- **Tool orchestration:** After receiving tool calls from the LLM, executes them sequentially and feeds results back into the conversation loop.
 
 ### `internal/tools` — Tool System
+Provides the tools the agent can use:
 
-Four tools available to the AI (platform-dependent shell tool):
+| Tool        | Description                                               | Side Effects Tracked? |
+|-------------|-----------------------------------------------------------|-----------------------|
+| `read`      | Read file contents (with offset/limit)                    | No                    |
+| `write`     | Create or overwrite a file                                | Yes (file content)    |
+| `edit`      | Replace a unique text occurrence in a file                | Yes (file content)    |
+| `powershell` (Windows) / `bash` (Linux/macOS) | Execute shell commands (30s default timeout) | Yes (command log) |
 
-| Tool | Description | Platform |
-|------|-------------|----------|
-| `read` | Read file contents with offset/limit support | All |
-| `write` | Create or overwrite files (creates parent dirs) | All |
-| `edit` | Replace exact text in files (oldText must be unique) | All |
-| `bash` | Execute shell commands via bash/sh | Linux/macOS |
-| `powershell` | Execute shell commands via PowerShell | Windows |
+- **`RollbackTracker`:** Records original file contents before modification and shell commands executed. The `/rollback` command restores files to their pre-modification state and reports shell commands that may have side effects.
 
-Each tool implements the `ToolExecutor` interface (`Name()`, `Execute()`, `SetTracker()`). Tool definitions include `PromptSnippet` and `PromptGuidelines` that feed into the auto-generated system prompt to guide the AI on proper tool usage.
+### `internal/tui` — Terminal User Interface
+Built with Bubble Tea v2. The TUI consists of:
+- **Output area** (viewport): Scrollable message history with distinct styles for user, assistant, thinking, tool calls/results, errors, and system messages.
+- **Input area** (textarea): Multi-line text input with dynamic height (max 17 lines).
+- **Command palette:** Activated by typing `/`; provides autocomplete for slash commands (`/new`, `/init`, `/sessions`, `/prompt`, `/rollback`).
+- **Session browser:** Modal list for browsing and resuming previous sessions.
 
-#### RollbackTracker
-
-`RollbackTracker` records file modifications and shell commands during each agent interaction. It tracks:
-- **File changes**: Original content before modification, whether the file existed, and deduplicates by path (first write wins)
-- **Shell commands**: All executed commands and their output
-
-The `/rollback` slash command restores modified files to their original state and reports shell commands that were executed (which cannot be automatically rolled back). It also rolls back the conversation context by removing the last user interaction.
+**Message flow:** User types input → Enter → Agent goroutine streams responses via channel → TUI receives `progressMsg` → History updates → Viewport re-renders.
 
 ### `internal/command` — Slash Commands
+Commands are registered in a `Registry` and invoked via the command palette or by typing `/command`:
 
-A registry-based command system. Commands implement the `Executor` interface:
+| Command      | Description                                                  |
+|--------------|--------------------------------------------------------------|
+| `/new`       | Start a fresh conversation (clears context)                  |
+| `/init`      | Analyze the project and generate `.gocode/AGENTS.md`         |
+| `/sessions`  | Open the session browser to continue a previous session      |
+| `/prompt`    | Display the current system prompt (for debugging)            |
+| `/rollback`  | Revert file changes from the last agent interaction          |
 
-```go
-type Executor interface {
-    Name() string
-    Description() string
-    Execute(ctx context.Context, args string, env *Env) (*Result, error)
-}
-```
+### `internal/store` — Persistence
+Stores sessions and messages as JSONL files under `~/.gocode/sessions/<cwd-hash>/`. Each session is a `.session` file with the first line as session metadata and subsequent lines as individual messages. Supports listing, loading, appending, and truncation.
 
-The `Env` struct provides access to the TUI (via `TUIAccess` interface) for session management, cancellation, and rollback tracker access. The `Result` struct can return a display `Message` and/or an `AgentInput` string that triggers automatic agent invocation (used by `/init`).
+---
 
-Registered commands: `new`, `sessions`, `init`, `prompt`, `rollback`.
+## Notes & Special Conventions
 
-### `internal/store` — Session Persistence
+1. **AGENTS.md auto-loading:** When the agent starts a conversation, it looks for `.gocode/AGENTS.md` in the current working directory. If found, its content is appended to the system prompt, giving the AI context about the project. The `/init` command generates this file.
 
-Stores sessions as JSONL files in `~/.gocode/sessions/<sanitized-cwd-path>/`. Each file:
+2. **API key:** The application requires `DEEPSEEK_API_KEY` to be set. It will exit with an error if the variable is missing.
 
-- Line 1: Session metadata (ID, created time, model, CWD, first message)
-- Subsequent lines: Messages (type, content, tool call info, error status)
+3. **Platform-aware shell tool:** On Windows the agent gets a `powershell` tool (with UTF-8 output encoding and `;` command separator); on Linux/macOS it gets a `bash` tool (with `&&` command separator).
 
-Thread-safe with mutex. Supports listing, reading, appending, and truncating (removing messages from the last user input onward). The CWD path is sanitized into a directory name by converting non-alphanumeric characters to dashes (e.g., `C:\Users\...\myproject` becomes `C-Users-...-myproject`).
+4. **Rollback scope:** Rollback only restores file contents; shell command side effects (e.g., installed packages, deleted files not tracked by the write/edit tools) must be manually reversed and are reported for user awareness.
 
-### `internal/tui` — Terminal UI
+5. **Session files** are stored at `~/.gocode/sessions/<sanitized-cwd-path>/` using a sanitized version of the project's absolute path, ensuring different projects have separate session histories.
 
-Built with Bubble Tea v2:
+6. **Streaming IDs:** Streaming messages (thinking and assistant) use UUIDs to identify update targets, allowing the TUI to upsert rather than append duplicate entries during incremental streaming.
 
-- **Model** holds editor (textarea), output (viewport), agent reference, history, palette, session browser, store, sessionID, and rollbackTracker
-- **Layout**: Output area on top (scrollable viewport), optional palette, then input editor at bottom. Editor has a 17-line max height.
-- **Key handling** is layered: session browser → palette → editor — each layer can consume or pass through keys
-- **Rendering**: Uses a dirty-flag pattern in history; only re-renders when content changes
-- **Focus**: Editor has initial focus after launch
-- **Cursor positioning**: Cursor is manually adjusted to account for output height, palette height, and border spacing
-
-#### Sub-packages
-
-- **`compoent/`** (note: intentional spelling): Defines a `Component` interface (`Type()`, `MsgID()`, `Content()`, `Render()`, `SetContent()`) and concrete types: `UserMessage`, `AssistantMessage`, `ThinkingMessage`, `ToolMessage`, `ErrorMessage`, `SystemMessage`. Each has a render cache with dirty-flag that only recalculates when content or width changes. Tool messages show a formatted first line (path/command) and up to 6 lines of result, with green styling for success and red for errors.
-- **`history/`**: In-memory list of components with `Append` (add new), `Upsert` (update-or-insert by MsgID for streaming updates), `UpdateToolResult` (set tool result on an existing ToolMessage), `TruncateFromLastUser` (remove last user message and everything after for rollback), `Clear`, and dirty-flag-based `Render` that returns line strings only when dirty.
-- **`palette/`**: Slash-command palette that appears when typing `/`. Supports filtering by name prefix, keyboard navigation (up/down), tab completion (auto-fills command name), and enter-to-execute. Renders up to 7 visible rows with highlight on selected item. The `Args()` method extracts arguments passed after the command name.
-- **`sessionbrowser/`**: A list-based modal for browsing past sessions. Uses a custom `list.Item` delegate for rendering session items with timestamps and first-message previews. Supports selection via Enter to load a session.
-
-## Notes and Special Conventions
-
-### AGENTS.md Auto-Loading
-
-The agent automatically looks for `.gocode/AGENTS.md` in the current working directory and appends its content to the system prompt. This is how the AI gets project-specific context. The `/init` command can generate this file by asking the AI to analyze the project.
-
-### Session Storage Location
-
-Sessions are stored under `~/.gocode/sessions/` with the CWD path sanitized into a directory name. For example, working in `C:\Users\LGZ\IdeaProjects\gocode` stores sessions in `~/.gocode/sessions/C-Users-LGZ-IdeaProjects-gocode/`.
-
-### Platform Awareness
-
-- On Windows, the `powershell` tool is registered; on Linux/macOS, `bash` is registered
-- PowerShell commands use `;` instead of `&&` for chaining
-- PowerShell commands are wrapped with `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8;` to handle Unicode
-- The system prompt includes the current OS name
-
-### Streaming Updates
-
-Content is streamed incrementally. The TUI uses `Upsert` (update-or-insert) for streaming messages so the display updates in real-time without duplicating entries. The final non-streaming message is also emitted when streaming completes.
-
-### Tool Call Flow
-
-1. AI requests tool calls in its response (in parallel or sequentially)
-2. Agent emits `MsgToolCall` for each call (with a unique ID)
-3. Tool is executed locally via `ToolExecutor.Execute()`
-4. Result is emitted as `MsgToolResult` (linked by ID), with error flag if the tool failed or returned non-zero exit code
-5. Results are fed back to the API for the next turn
-6. Loop continues until the AI produces a final text response (no more tool calls)
-
-### Rollback Flow
-
-1. Each agent interaction creates a fresh `RollbackTracker`
-2. `write` and `edit` tools record original file state before modifying
-3. Shell tools record the command and output
-4. The user can invoke `/rollback` to restore files and review shell commands
-5. `/rollback` also truncates the conversation context (TUI history, agent context messages, and persisted store messages) back to before the last user interaction
-6. After rollback or starting a new agent interaction, the tracker is cleared
-
-### Session Persistence
-
-- Each session gets a unique ID in the format `YYYY-MM-DD-HH-MM-SS-<random-hex>`
-- Messages are persisted in real-time as they stream in (assistant, thinking, tool calls, tool results)
-- When loading a past session, persisted messages are reconstructed into OpenAI-format messages via `ReconstructHistory()` and loaded into the agent context
-- The session store uses a `sync.Mutex` for thread-safe access; writers are kept open for efficient appending
+7. **No external configuration file:** All configuration is via environment variables or defaults. The model (`deepseek-v4-pro`) and base URL (`https://api.deepseek.com`) are hardcoded in `cmd/gocode.go`.
