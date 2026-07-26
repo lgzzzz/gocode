@@ -2,7 +2,6 @@ package command
 
 import "context"
 
-// initPrompt is the preset prompt sent to the LLM to generate AGENTS.md.
 const initPrompt = `Please analyze the current project and generate an AGENTS.md file at .gocode/AGENTS.md in the current working directory.
 
 The purpose of the AGENTS.md file is: when an AI assistant works in this project, this file will be automatically loaded as part of the system prompt, helping the AI better understand the project.
@@ -28,8 +27,6 @@ func (c *InitCommand) Execute(ctx context.Context, args string, env *Env) (*Resu
 	if env.TUI.Running() {
 		env.TUI.CancelAgent()
 	}
-	// Skip loading existing AGENTS.md into the system prompt, since the
-	// init command's purpose is to generate a fresh AGENTS.md from scratch.
 	env.TUI.SetSkipAgentsMD(true)
 	env.TUI.NewSession()
 	return &Result{

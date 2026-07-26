@@ -68,6 +68,7 @@ func NewModel(ag *agent.Agent, st *store.Store) tea.Model {
 	reg.Register(&command.NewCommand{})
 	reg.Register(&command.SessionsCommand{})
 	reg.Register(&command.InitCommand{})
+	reg.Register(&command.UpdateCommand{})
 	reg.Register(&command.PromptCommand{})
 	reg.Register(&command.RollbackCommand{})
 
