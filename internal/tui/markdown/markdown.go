@@ -71,18 +71,9 @@ func (r *Renderer) render(content string, width int, gr *glamour.TermRenderer) s
 	if width != r.lastWidth || !strings.HasPrefix(content, r.stablePrefix) {
 		r.Reset()
 		r.lastWidth = width
-		splitPoint := r.split.findSafeSplitPoint(content)
-		r.stablePrefix = content[:splitPoint]
-		stablePrefixRender, err := gr.Render(content[:splitPoint])
-		if err != nil {
-			return content
-		}
-		r.stablePrefixRender = stablePrefixRender
-		render, err := gr.Render(content[splitPoint:])
-		if err != nil {
-			return content
-		}
-		return joinParts(stablePrefixRender, render)
+		out := fullRender()
+		r.tryCachePrefix(content, width, gr)
+		return out
 	}
 
 	splitPoint := r.split.findSafeSplitPoint(content)
@@ -116,6 +107,21 @@ func (r *Renderer) renderPart(text string, gr *glamour.TermRenderer) string {
 		return text
 	}
 	return strings.TrimSpace(out)
+}
+
+func (r *Renderer) tryCachePrefix(content string, width int, gr *glamour.TermRenderer) {
+	splitPoint := r.split.findSafeSplitPoint(content)
+	if splitPoint <= 0 {
+		return
+	}
+	prefix := content[:splitPoint]
+	out, err := gr.Render(prefix)
+	if err != nil {
+		return
+	}
+	r.stablePrefix = prefix
+	r.stablePrefixRender = strings.TrimSpace(out)
+	r.lastWidth = width
 }
 
 func joinParts(a, b string) string {
