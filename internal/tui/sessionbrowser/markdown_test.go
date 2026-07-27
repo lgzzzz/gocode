@@ -52,6 +52,9 @@ func TestRender_FullRender(t *testing.T) {
 	renderStat := fullRenderer.Stat()
 	fmt.Printf("全量绘制次数:%d\n增量绘制次数:%d\n部分绘制次数: %d\n部分绘制最大长度: %d\n", renderStat.FullRenderCount, renderStat.IncrementRenderCount, renderStat.RenderPartCount, renderStat.MaxRenderContentLength)
 	fmt.Println("部分绘制百分比:", float64(renderStat.MaxRenderContentLength)/float64(len(content))*100, "%")
+
+	// 总耗时: 28.9044823s
+	// 平均耗时: 26.988312ms
 }
 
 func TestRender_Increment(t *testing.T) {
@@ -60,20 +63,22 @@ func TestRender_Increment(t *testing.T) {
 		t.Fatal("testMarkdown.md is empty")
 	}
 
-	incrementRenderer := markdown.NewRenderer()
+	incrementRenderer := compoent.NewAssistantMessage("1", "")
 	const width = 100
 	t1 := time.Now()
 	count := 0
 	for i := 0; i <= len(content)-1; i = i + 10 {
 		count++
-		//incrementRenderer.Render(content[:i], width)
-		renderText := incrementRenderer.Render(content[:i], width)
-		compoent.Render(compoent.AssistantStyle, width, renderText)
+		incrementRenderer.SetContent(content[:i])
+		incrementRenderer.Render(width)
 	}
 	total := time.Since(t1)
 	avg := total / time.Duration(count)
 	fmt.Printf("总耗时: %s\n平均耗时: %s\n调用次数: %d\n", total.String(), avg.String(), count)
-	renderStat := incrementRenderer.Stat()
-	fmt.Printf("全量绘制次数:%d\n增量绘制次数:%d\n部分绘制次数: %d\n部分绘制最大长度: %d\n", renderStat.FullRenderCount, renderStat.IncrementRenderCount, renderStat.RenderPartCount, renderStat.MaxRenderContentLength)
-	fmt.Println("部分绘制百分比:", float64(renderStat.MaxRenderContentLength)/float64(len(content))*100, "%")
+
+	// 总耗时: 10.367235s
+	// 平均耗时: 9.679957ms
+
+	// 总耗时: 2.9922679s
+	// 平均耗时: 2.7939ms
 }
