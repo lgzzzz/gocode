@@ -1,12 +1,47 @@
 package markdown
 
 import (
+	"regexp"
 	"strings"
 	"sync"
 
 	"charm.land/glamour/v2"
 	"charm.land/glamour/v2/styles"
 )
+
+var ansiRe = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`)
+
+func isEmptyOrInvisible(s string) bool {
+	return strings.TrimSpace(ansiRe.ReplaceAllString(s, "")) == ""
+}
+
+func trimEmptyLine(content string) string {
+	// Trim leading empty lines
+	for {
+		index := strings.Index(content, "\n")
+		if index == -1 {
+			break
+		}
+		if isEmptyOrInvisible(content[:index]) {
+			content = content[index+1:]
+		} else {
+			break
+		}
+	}
+	// Trim trailing empty lines
+	for {
+		index := strings.LastIndex(content, "\n")
+		if index == -1 {
+			break
+		}
+		if isEmptyOrInvisible(content[index+1:]) {
+			content = content[:index]
+		} else {
+			break
+		}
+	}
+	return content
+}
 
 var darkCompactConfig = styles.DraculaStyleConfig
 
@@ -65,7 +100,7 @@ func (r *Renderer) render(content string, width int, gr *glamour.TermRenderer) s
 		if err != nil {
 			return content
 		}
-		return strings.TrimSpace(out)
+		return trimEmptyLine(out)
 	}
 
 	if width != r.lastWidth || !strings.HasPrefix(content, r.stablePrefix) {
@@ -99,15 +134,11 @@ func (r *Renderer) render(content string, width int, gr *glamour.TermRenderer) s
 }
 
 func (r *Renderer) renderPart(text string, gr *glamour.TermRenderer) string {
-	text = strings.TrimSpace(text)
-	if text == "" {
-		return ""
-	}
 	out, err := gr.Render(text)
 	if err != nil {
 		return text
 	}
-	return strings.TrimSpace(out)
+	return out
 }
 
 func (r *Renderer) tryCachePrefix(content string, width int, gr *glamour.TermRenderer) {
@@ -115,18 +146,19 @@ func (r *Renderer) tryCachePrefix(content string, width int, gr *glamour.TermRen
 	if splitPoint <= 0 {
 		return
 	}
-	prefix := strings.TrimSpace(content[:splitPoint])
+	prefix := content[:splitPoint]
 	out, err := gr.Render(prefix)
 	if err != nil {
 		return
 	}
 	r.stablePrefix = prefix
-	r.stablePrefixRender = strings.TrimSpace(out)
+	r.stablePrefixRender = out
 	r.lastWidth = width
 }
 
 func joinParts(a, b string) string {
-	a, b = strings.TrimSpace(a), strings.TrimSpace(b)
+	a = trimEmptyLine(a)
+	b = trimEmptyLine(b)
 	switch {
 	case a == "" && b == "":
 		return ""
