@@ -59,17 +59,17 @@ func (d *splitDetector) canSplitAt(content string, p int) bool {
 	if d.countFences(prefix)%2 != 0 {
 		return false
 	}
-	if d.hasOpenBlock(prefix) {
-		return false
-	}
-	if last := d.lastNonBlank(prefix); last != "" && d.isBlockLine(last) {
-		return false
-	}
-	if rest := content[p:]; rest != "" {
-		if first := d.firstNonBlank(rest); d.isSetextLine(first) {
-			return false
-		}
-	}
+	//if d.hasOpenBlock(prefix) {
+	//	return false
+	//}
+	//if last := d.lastNonBlank(prefix); last != "" && d.isBlockLine(last) {
+	//	return false
+	//}
+	//if rest := content[p:]; rest != "" {
+	//	if first := d.firstNonBlank(rest); d.isSetextLine(first) {
+	//		return false
+	//	}
+	//}
 	return true
 }
 

@@ -1,4 +1,4 @@
-package markdown
+package sessionbrowser
 
 import (
 	"fmt"
@@ -7,6 +7,9 @@ import (
 	"runtime"
 	"testing"
 	"time"
+
+	"github.com/lgzzzz/gocode/internal/tui/compoent"
+	"github.com/lgzzzz/gocode/internal/tui/markdown"
 )
 
 // ============================================================================
@@ -32,21 +35,23 @@ func TestRender_FullRender(t *testing.T) {
 		t.Fatal("testMarkdown.md is empty")
 	}
 
-	fullRenderer := NewRenderer()
+	fullRenderer := markdown.NewRenderer()
 	fullRenderer.SetFullRender(true)
 	const width = 100
 	t1 := time.Now()
 	count := 0
 	for i := 0; i <= len(content)-1; i = i + 10 {
 		count++
-		fullRenderer.Render(content[:i], width)
+		//fullRenderer.Render(content[:i], width)
+		renderText := fullRenderer.Render(content[:i], width)
+		compoent.Render(compoent.AssistantStyle, width, renderText)
 	}
 	total := time.Since(t1)
 	avg := total / time.Duration(count)
 	fmt.Printf("总耗时: %s\n平均耗时: %s\n调用次数: %d\n", total.String(), avg.String(), count)
 	renderStat := fullRenderer.Stat()
-	fmt.Printf("全量绘制次数:%d\n增量绘制次数:%d\n部分绘制次数: %d\n部分绘制最大长度: %d\n", renderStat.fullRenderCount, renderStat.incrementRenderCount, renderStat.renderPartCount, renderStat.maxRenderContentLength)
-	fmt.Println("部分绘制百分比:", float64(renderStat.maxRenderContentLength)/float64(len(content))*100, "%")
+	fmt.Printf("全量绘制次数:%d\n增量绘制次数:%d\n部分绘制次数: %d\n部分绘制最大长度: %d\n", renderStat.FullRenderCount, renderStat.IncrementRenderCount, renderStat.RenderPartCount, renderStat.MaxRenderContentLength)
+	fmt.Println("部分绘制百分比:", float64(renderStat.MaxRenderContentLength)/float64(len(content))*100, "%")
 }
 
 func TestRender_Increment(t *testing.T) {
@@ -55,18 +60,20 @@ func TestRender_Increment(t *testing.T) {
 		t.Fatal("testMarkdown.md is empty")
 	}
 
-	incrementRenderer := NewRenderer()
+	incrementRenderer := markdown.NewRenderer()
 	const width = 100
 	t1 := time.Now()
 	count := 0
 	for i := 0; i <= len(content)-1; i = i + 10 {
 		count++
-		incrementRenderer.Render(content[:i], width)
+		//incrementRenderer.Render(content[:i], width)
+		renderText := incrementRenderer.Render(content[:i], width)
+		compoent.Render(compoent.AssistantStyle, width, renderText)
 	}
 	total := time.Since(t1)
 	avg := total / time.Duration(count)
 	fmt.Printf("总耗时: %s\n平均耗时: %s\n调用次数: %d\n", total.String(), avg.String(), count)
 	renderStat := incrementRenderer.Stat()
-	fmt.Printf("全量绘制次数:%d\n增量绘制次数:%d\n部分绘制次数: %d\n部分绘制最大长度: %d\n", renderStat.fullRenderCount, renderStat.incrementRenderCount, renderStat.renderPartCount, renderStat.maxRenderContentLength)
-	fmt.Println("部分绘制百分比:", float64(renderStat.maxRenderContentLength)/float64(len(content))*100, "%")
+	fmt.Printf("全量绘制次数:%d\n增量绘制次数:%d\n部分绘制次数: %d\n部分绘制最大长度: %d\n", renderStat.FullRenderCount, renderStat.IncrementRenderCount, renderStat.RenderPartCount, renderStat.MaxRenderContentLength)
+	fmt.Println("部分绘制百分比:", float64(renderStat.MaxRenderContentLength)/float64(len(content))*100, "%")
 }

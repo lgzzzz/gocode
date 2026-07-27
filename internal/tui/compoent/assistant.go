@@ -44,5 +44,5 @@ func (m *AssistantMessage) Render(width int) string {
 
 func (m *AssistantMessage) renderMarkdown(width int) string {
 	out := m.md.Render(m.content, width-2)
-	return render(assistantStyle, width, out)
+	return Render(AssistantStyle, width, out)
 }

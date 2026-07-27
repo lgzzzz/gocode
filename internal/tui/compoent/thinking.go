@@ -44,5 +44,5 @@ func (m *ThinkingMessage) Render(width int) string {
 
 func (m *ThinkingMessage) renderMarkdown(width int) string {
 	out := m.md.Render(m.content, width-2)
-	return render(thinkingStyle, width, out)
+	return Render(ThinkingStyle, width, out)
 }

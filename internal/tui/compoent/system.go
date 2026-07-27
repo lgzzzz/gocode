@@ -25,7 +25,7 @@ func (m *SystemMessage) SetContent(content string) {
 	}
 	m.content = content
 	if m.renderWidth > 0 {
-		m.renderCache = render(systemStyle, m.renderWidth-1, strings.TrimSpace(content))
+		m.renderCache = Render(SystemStyle, m.renderWidth-1, strings.TrimSpace(content))
 	} else {
 		m.dirty = true
 	}
@@ -36,7 +36,7 @@ func (m *SystemMessage) Render(width int) string {
 		return m.renderCache
 	}
 	m.renderWidth = width
-	m.renderCache = render(systemStyle, width-1, m.content)
+	m.renderCache = Render(SystemStyle, width-1, m.content)
 	m.dirty = false
 	return m.renderCache
 }

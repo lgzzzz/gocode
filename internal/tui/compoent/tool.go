@@ -105,11 +105,11 @@ func (m *ToolMessage) renderLocked(width int) string {
 		body = "\n" + strings.Join(lines, "\n")
 	}
 
-	style := toolStyle
-	boldStyle := toolBoldStyle
+	style := ToolStyle
+	boldStyle := ToolBoldStyle
 	if m.state == ToolStateError {
-		style = toolErrorStyle
-		boldStyle = toolErrorBoldStyle
+		style = ToolErrorStyle
+		boldStyle = ToolErrorBoldStyle
 	}
 
 	rendered := strings.TrimSpace(boldStyle.Width(width - 1).Render(firstLine))

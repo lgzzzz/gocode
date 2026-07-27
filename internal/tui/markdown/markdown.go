@@ -22,10 +22,10 @@ func init() {
 }
 
 type RenderStaus struct {
-	fullRenderCount        int
-	incrementRenderCount   int
-	renderPartCount        int
-	maxRenderContentLength int
+	FullRenderCount        int
+	IncrementRenderCount   int
+	RenderPartCount        int
+	MaxRenderContentLength int
 }
 
 // Renderer 是一个带流式优化缓存的 markdown 渲染器。
@@ -80,7 +80,7 @@ func (r *Renderer) Stat() RenderStaus {
 
 func (r *Renderer) render(content string, width int, gr *glamour.TermRenderer) string {
 	fullRender := func() string {
-		r.renderStatus.fullRenderCount++
+		r.renderStatus.FullRenderCount++
 		out, err := gr.Render(content)
 		if err != nil {
 			return content
@@ -99,7 +99,7 @@ func (r *Renderer) render(content string, width int, gr *glamour.TermRenderer) s
 		return out
 	}
 
-	r.renderStatus.incrementRenderCount++
+	r.renderStatus.IncrementRenderCount++
 	splitPoint := r.split.findSafeSplitPoint(content)
 	if splitPoint < 0 {
 		return fullRender()
@@ -123,9 +123,9 @@ func (r *Renderer) render(content string, width int, gr *glamour.TermRenderer) s
 }
 
 func (r *Renderer) renderPart(text string, gr *glamour.TermRenderer) string {
-	r.renderStatus.renderPartCount++
-	if len(text) > r.renderStatus.maxRenderContentLength {
-		r.renderStatus.maxRenderContentLength = len(text)
+	r.renderStatus.RenderPartCount++
+	if len(text) > r.renderStatus.MaxRenderContentLength {
+		r.renderStatus.MaxRenderContentLength = len(text)
 	}
 	out, err := gr.Render(text)
 	if err != nil {
@@ -135,7 +135,7 @@ func (r *Renderer) renderPart(text string, gr *glamour.TermRenderer) string {
 }
 
 func (r *Renderer) tryCachePrefix(content string, width int, gr *glamour.TermRenderer) {
-	r.renderStatus.fullRenderCount++
+	r.renderStatus.FullRenderCount++
 	splitPoint := r.split.findSafeSplitPoint(content)
 	if splitPoint <= 0 {
 		return

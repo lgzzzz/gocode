@@ -102,9 +102,9 @@ There is currently no dedicated test suite. Manual verification is done by runni
 - **Interfaces:** Suffix `-er` when describing a capability (`ToolExecutor`, `TUIAccess`, `Executor`).
 
 ### Code Organization
-- **`internal/`** contains all application logic; nothing outside `internal/` is importable by other modules.
-- **TUI components** implement the `Component` interface (from `internal/tui/compoent/component.go`) with `Type()`, `MsgID()`, `Content()`, `Render()`, and `SetContent()`.
-- **Tools** implement `ToolExecutor` (from `internal/tools/tools.go`) with `Name()`, `Execute()`, and `SetTracker()`.
+- **`../..`** contains all application logic; nothing outside `../..` is importable by other modules.
+- **TUI components** implement the `Component` interface (from `../compoent/component.go`) with `Type()`, `MsgID()`, `Content()`, `Render()`, and `SetContent()`.
+- **Tools** implement `ToolExecutor` (from `../../tools/tools.go`) with `Name()`, `Execute()`, and `SetTracker()`.
 - **Commands** implement `command.Executor` with `Name()`, `Description()`, and `Execute()`.
 
 ### Style
@@ -116,18 +116,18 @@ There is currently no dedicated test suite. Manual verification is done by runni
 
 ## Key Modules
 
-### `cmd/gocode.go` — Entry Point
+### `../../../cmd/gocode.go` — Entry Point
 Reads `DEEPSEEK_API_KEY` from the environment, initializes the session store, creates the agent with the DeepSeek model (`deepseek-v4-pro`), and launches the Bubble Tea TUI program.
 
-### `internal/agent` — LLM Agent
+### `../../agent` — LLM Agent
 Core agent that communicates with the DeepSeek API. Key responsibilities:
-- **System prompt construction:** Dynamically builds a system prompt that includes available tool descriptions, usage guidelines, the current working directory, OS information, and optionally the contents of `.gocode/AGENTS.md`.
+- **System prompt construction:** Dynamically builds a system prompt that includes available tool descriptions, usage guidelines, the current working directory, OS information, and optionally the contents of `../../../.gocode/AGENTS.md`.
 - **Streaming:** Uses OpenAI-compatible streaming API; emits incremental `CallbackMsg` events for real-time UI updates (thinking stream, assistant stream, tool calls, tool results).
 - **Context management:** Maintains conversation history (`contextMessages`), supports truncation from the last user message, and context reconstruction from stored history.
 - **Retry logic:** Automatically retries failed API calls up to 3 times with a 2-second backoff.
 - **Tool orchestration:** After receiving tool calls from the LLM, executes them sequentially and feeds results back into the conversation loop.
 
-### `internal/tools` — Tool System
+### `../../tools` — Tool System
 Provides the tools the agent can use:
 
 | Tool        | Description                                               | Side Effects Tracked? |
@@ -139,7 +139,7 @@ Provides the tools the agent can use:
 
 - **`RollbackTracker`:** Records original file contents before modification and shell commands executed. The `/rollback` command restores files to their pre-modification state and reports shell commands that may have side effects.
 
-### `internal/tui` — Terminal User Interface
+### `..` — Terminal User Interface
 Built with Bubble Tea v2. The TUI consists of:
 - **Output area** (viewport): Scrollable message history with distinct styles for user, assistant, thinking, tool calls/results, errors, and system messages.
 - **Input area** (textarea): Multi-line text input with dynamic height (max 17 lines).
@@ -148,25 +148,25 @@ Built with Bubble Tea v2. The TUI consists of:
 
 **Message flow:** User types input → Enter → Agent goroutine streams responses via channel → TUI receives `progressMsg` → History updates → Viewport re-renders.
 
-### `internal/command` — Slash Commands
+### `../../command` — Slash Commands
 Commands are registered in a `Registry` and invoked via the command palette or by typing `/command`:
 
 | Command      | Description                                                  |
 |--------------|--------------------------------------------------------------|
 | `/new`       | Start a fresh conversation (clears context)                  |
-| `/init`      | Analyze the project and generate `.gocode/AGENTS.md`         |
+| `/init`      | Analyze the project and generate `../../../.gocode/AGENTS.md`         |
 | `/sessions`  | Open the session browser to continue a previous session      |
 | `/prompt`    | Display the current system prompt (for debugging)            |
 | `/rollback`  | Revert file changes from the last agent interaction          |
 
-### `internal/store` — Persistence
+### `../../store` — Persistence
 Stores sessions and messages as JSONL files under `~/.gocode/sessions/<cwd-hash>/`. Each session is a `.session` file with the first line as session metadata and subsequent lines as individual messages. Supports listing, loading, appending, and truncation.
 
 ---
 
 ## Notes & Special Conventions
 
-1. **AGENTS.md auto-loading:** When the agent starts a conversation, it looks for `.gocode/AGENTS.md` in the current working directory. If found, its content is appended to the system prompt, giving the AI context about the project. The `/init` command generates this file.
+1. **AGENTS.md auto-loading:** When the agent starts a conversation, it looks for `../../../.gocode/AGENTS.md` in the current working directory. If found, its content is appended to the system prompt, giving the AI context about the project. The `/init` command generates this file.
 
 2. **API key:** The application requires `DEEPSEEK_API_KEY` to be set. It will exit with an error if the variable is missing.
 
@@ -178,4 +178,4 @@ Stores sessions and messages as JSONL files under `~/.gocode/sessions/<cwd-hash>
 
 6. **Streaming IDs:** Streaming messages (thinking and assistant) use UUIDs to identify update targets, allowing the TUI to upsert rather than append duplicate entries during incremental streaming.
 
-7. **No external configuration file:** All configuration is via environment variables or defaults. The model (`deepseek-v4-pro`) and base URL (`https://api.deepseek.com`) are hardcoded in `cmd/gocode.go`.
+7. **No external configuration file:** All configuration is via environment variables or defaults. The model (`deepseek-v4-pro`) and base URL (`https://api.deepseek.com`) are hardcoded in `../../../cmd/gocode.go`.
