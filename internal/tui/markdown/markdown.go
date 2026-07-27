@@ -21,6 +21,13 @@ func init() {
 	darkCompactConfig.H6.Prefix = ""
 }
 
+type RenderStaus struct {
+	fullRenderCount        int
+	incrementRenderCount   int
+	renderPartCount        int
+	maxRenderContentLength int
+}
+
 // Renderer 是一个带流式优化缓存的 markdown 渲染器。
 // 它缓存已渲染的"稳定前缀"，使得 AI 流式输出时只重新渲染尾部新增内容。
 //
@@ -31,11 +38,18 @@ type Renderer struct {
 	stablePrefix       string
 	stablePrefixRender string
 	split              splitDetector
+	fullRender         bool
+
+	renderStatus RenderStaus
 }
 
 // NewRenderer 创建一个 Renderer。
 func NewRenderer() *Renderer {
 	return &Renderer{}
+}
+
+func (r *Renderer) SetFullRender(fullRender bool) {
+	r.fullRender = fullRender
 }
 
 // Render 将 markdown 文本渲染为带 ANSI 样式的终端字符串。
@@ -56,17 +70,25 @@ func (r *Renderer) Reset() {
 	r.stablePrefixRender = ""
 }
 
+func (r *Renderer) Stat() RenderStaus {
+	return r.renderStatus
+}
+
 // ---------------------------------------------------------------------------
 // 流式渲染逻辑
 // ---------------------------------------------------------------------------
 
 func (r *Renderer) render(content string, width int, gr *glamour.TermRenderer) string {
 	fullRender := func() string {
+		r.renderStatus.fullRenderCount++
 		out, err := gr.Render(content)
 		if err != nil {
 			return content
 		}
 		return util.TrimEmptyLine(out)
+	}
+	if r.fullRender {
+		return fullRender()
 	}
 
 	if width != r.lastWidth || !strings.HasPrefix(content, r.stablePrefix) {
@@ -77,6 +99,7 @@ func (r *Renderer) render(content string, width int, gr *glamour.TermRenderer) s
 		return out
 	}
 
+	r.renderStatus.incrementRenderCount++
 	splitPoint := r.split.findSafeSplitPoint(content)
 	if splitPoint < 0 {
 		return fullRender()
@@ -100,6 +123,10 @@ func (r *Renderer) render(content string, width int, gr *glamour.TermRenderer) s
 }
 
 func (r *Renderer) renderPart(text string, gr *glamour.TermRenderer) string {
+	r.renderStatus.renderPartCount++
+	if len(text) > r.renderStatus.maxRenderContentLength {
+		r.renderStatus.maxRenderContentLength = len(text)
+	}
 	out, err := gr.Render(text)
 	if err != nil {
 		return text
@@ -108,6 +135,7 @@ func (r *Renderer) renderPart(text string, gr *glamour.TermRenderer) string {
 }
 
 func (r *Renderer) tryCachePrefix(content string, width int, gr *glamour.TermRenderer) {
+	r.renderStatus.fullRenderCount++
 	splitPoint := r.split.findSafeSplitPoint(content)
 	if splitPoint <= 0 {
 		return
