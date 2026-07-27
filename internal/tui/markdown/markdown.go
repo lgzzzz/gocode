@@ -11,12 +11,12 @@ var darkCompactConfig = styles.DraculaStyleConfig
 
 func init() {
 	darkCompactConfig.Document.Margin = new(uint(0))
-	darkCompactConfig.H1.BlockPrefix = ""
-	darkCompactConfig.H2.BlockPrefix = ""
-	darkCompactConfig.H3.BlockPrefix = ""
-	darkCompactConfig.H4.BlockPrefix = ""
-	darkCompactConfig.H5.BlockPrefix = ""
-	darkCompactConfig.H6.BlockPrefix = ""
+	darkCompactConfig.H1.Prefix = ""
+	darkCompactConfig.H2.Prefix = ""
+	darkCompactConfig.H3.Prefix = ""
+	darkCompactConfig.H4.Prefix = ""
+	darkCompactConfig.H5.Prefix = ""
+	darkCompactConfig.H6.Prefix = ""
 }
 
 // MarkdownRenderer returns a glamour TermRenderer configured with compact table
