@@ -65,7 +65,7 @@ func (r *Renderer) render(content string, width int, gr *glamour.TermRenderer) s
 		if err != nil {
 			return content
 		}
-		return strings.TrimSuffix(out, "\n")
+		return strings.TrimSpace(out)
 	}
 
 	if width != r.lastWidth || !strings.HasPrefix(content, r.stablePrefix) {
@@ -99,6 +99,7 @@ func (r *Renderer) render(content string, width int, gr *glamour.TermRenderer) s
 }
 
 func (r *Renderer) renderPart(text string, gr *glamour.TermRenderer) string {
+	text = strings.TrimSpace(text)
 	if text == "" {
 		return ""
 	}
@@ -114,7 +115,7 @@ func (r *Renderer) tryCachePrefix(content string, width int, gr *glamour.TermRen
 	if splitPoint <= 0 {
 		return
 	}
-	prefix := content[:splitPoint]
+	prefix := strings.TrimSpace(content[:splitPoint])
 	out, err := gr.Render(prefix)
 	if err != nil {
 		return
