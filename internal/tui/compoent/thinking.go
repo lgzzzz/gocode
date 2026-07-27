@@ -1,8 +1,6 @@
 package compoent
 
 import (
-	"strings"
-
 	"github.com/lgzzzz/gocode/internal/agent"
 	"github.com/lgzzzz/gocode/internal/tui/markdown"
 )
@@ -13,10 +11,11 @@ type ThinkingMessage struct {
 	renderCache string
 	renderWidth int
 	dirty       bool
+	md          *markdown.Renderer
 }
 
 func NewThinkingMessage(id, content string) *ThinkingMessage {
-	m := &ThinkingMessage{id: id}
+	m := &ThinkingMessage{id: id, md: markdown.NewRenderer()}
 	m.SetContent(content)
 	return m
 }
@@ -43,21 +42,7 @@ func (m *ThinkingMessage) Render(width int) string {
 	return m.renderCache
 }
 
-// renderMarkdown converts the thinking content from markdown to styled
-// terminal output using glamour (quiet mode, no colors), then prepends
-// the thinking bar prefix to each line.
 func (m *ThinkingMessage) renderMarkdown(width int) string {
-	content := strings.TrimSpace(m.content)
-	if content == "" {
-		return ""
-	}
-
-	renderer := markdown.MarkdownRenderer(width - 2)
-	defer renderer.Close()
-	out, err := renderer.Render(content)
-	if err != nil {
-		return renderTrim(thinkingStyle, width, content)
-	}
-
-	return renderTrim(thinkingStyle, width, strings.TrimSpace(out))
+	out := m.md.Render(m.content, width-2)
+	return render(thinkingStyle, width, out)
 }

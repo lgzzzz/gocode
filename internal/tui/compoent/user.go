@@ -25,7 +25,7 @@ func (m *UserMessage) SetContent(content string) {
 	}
 	m.content = content
 	if m.renderWidth > 0 {
-		m.renderCache = renderTrim(userStyle, m.renderWidth-1, content)
+		m.renderCache = render(userStyle, m.renderWidth-1, content)
 	} else {
 		m.dirty = true
 	}
@@ -36,7 +36,7 @@ func (m *UserMessage) Render(width int) string {
 		return m.renderCache
 	}
 	m.renderWidth = width
-	m.renderCache = renderTrim(userStyle, width-1, m.content)
+	m.renderCache = render(userStyle, width-1, m.content)
 	m.dirty = false
 	return m.renderCache
 }

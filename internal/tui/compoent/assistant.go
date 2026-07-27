@@ -1,8 +1,6 @@
 package compoent
 
 import (
-	"strings"
-
 	"github.com/lgzzzz/gocode/internal/agent"
 	"github.com/lgzzzz/gocode/internal/tui/markdown"
 )
@@ -13,10 +11,11 @@ type AssistantMessage struct {
 	renderCache string
 	renderWidth int
 	dirty       bool
+	md          *markdown.Renderer
 }
 
 func NewAssistantMessage(id, content string) *AssistantMessage {
-	m := &AssistantMessage{id: id}
+	m := &AssistantMessage{id: id, md: markdown.NewRenderer()}
 	m.SetContent(content)
 	return m
 }
@@ -43,21 +42,7 @@ func (m *AssistantMessage) Render(width int) string {
 	return m.renderCache
 }
 
-// renderMarkdown converts the message content from markdown to styled
-// terminal output using glamour, then prepends the assistant bar prefix
-// to each line.
 func (m *AssistantMessage) renderMarkdown(width int) string {
-	content := strings.TrimSpace(m.content)
-	if content == "" {
-		return ""
-	}
-
-	renderer := markdown.MarkdownRenderer(width - 2)
-	defer renderer.Close()
-	out, err := renderer.Render(content)
-	if err != nil {
-		return renderTrim(assistantStyle, width, content)
-	}
-
-	return renderTrim(assistantStyle, width, strings.TrimSpace(out))
+	out := m.md.Render(m.content, width-2)
+	return render(assistantStyle, width, out)
 }

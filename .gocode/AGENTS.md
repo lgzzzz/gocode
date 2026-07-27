@@ -98,7 +98,7 @@ There is currently no dedicated test suite. Manual verification is done by runni
 
 ### Naming Conventions
 - **Exported types/functions:** PascalCase (`NewModel`, `CallbackMsg`, `RollbackTracker`).
-- **Unexported types/functions:** camelCase (`sysMsg`, `userMsg`, `loadAgentsMD`, `renderTrim`).
+- **Unexported types/functions:** camelCase (`sysMsg`, `userMsg`, `loadAgentsMD`, `render`).
 - **Interfaces:** Suffix `-er` when describing a capability (`ToolExecutor`, `TUIAccess`, `Executor`).
 
 ### Code Organization

@@ -4,7 +4,7 @@ import (
 	"charm.land/lipgloss/v2"
 )
 
-func renderTrim(style lipgloss.Style, width int, content string) string {
+func render(style lipgloss.Style, width int, content string) string {
 	return style.Width(width).Render(content)
 }
 
