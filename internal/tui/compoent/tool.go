@@ -4,8 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
-)
 
+	"github.com/lgzzzz/gocode/internal/tui/util"
+)
 
 type ToolState int
 
@@ -113,7 +114,7 @@ func (m *ToolMessage) renderLocked(width int) string {
 
 	rendered := strings.TrimSpace(boldStyle.Width(width - 1).Render(firstLine))
 	if body != "" {
-		rendered += "\n" + strings.TrimSpace(style.Width(width - 1).Render(strings.TrimSpace(body)))
+		rendered += "\n" + util.TrimEmptyLine(style.Width(width-1).Render(strings.TrimSpace(body)))
 	}
 	return rendered
 }

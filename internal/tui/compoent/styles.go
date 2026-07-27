@@ -2,10 +2,12 @@ package compoent
 
 import (
 	"charm.land/lipgloss/v2"
+	"github.com/lgzzzz/gocode/internal/tui/util"
 )
 
 func render(style lipgloss.Style, width int, content string) string {
-	return style.Width(width).Render(content)
+	out := style.Width(width).Render(content)
+	return util.TrimEmptyLine(out)
 }
 
 func leftBar(hexColor string) lipgloss.Style {

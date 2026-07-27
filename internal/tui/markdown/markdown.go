@@ -1,47 +1,13 @@
 package markdown
 
 import (
-	"regexp"
 	"strings"
 	"sync"
 
 	"charm.land/glamour/v2"
 	"charm.land/glamour/v2/styles"
+	"github.com/lgzzzz/gocode/internal/tui/util"
 )
-
-var ansiRe = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`)
-
-func isEmptyOrInvisible(s string) bool {
-	return strings.TrimSpace(ansiRe.ReplaceAllString(s, "")) == ""
-}
-
-func trimEmptyLine(content string) string {
-	// Trim leading empty lines
-	for {
-		index := strings.Index(content, "\n")
-		if index == -1 {
-			break
-		}
-		if isEmptyOrInvisible(content[:index]) {
-			content = content[index+1:]
-		} else {
-			break
-		}
-	}
-	// Trim trailing empty lines
-	for {
-		index := strings.LastIndex(content, "\n")
-		if index == -1 {
-			break
-		}
-		if isEmptyOrInvisible(content[index+1:]) {
-			content = content[:index]
-		} else {
-			break
-		}
-	}
-	return content
-}
 
 var darkCompactConfig = styles.DraculaStyleConfig
 
@@ -100,7 +66,7 @@ func (r *Renderer) render(content string, width int, gr *glamour.TermRenderer) s
 		if err != nil {
 			return content
 		}
-		return trimEmptyLine(out)
+		return util.TrimEmptyLine(out)
 	}
 
 	if width != r.lastWidth || !strings.HasPrefix(content, r.stablePrefix) {
@@ -157,8 +123,8 @@ func (r *Renderer) tryCachePrefix(content string, width int, gr *glamour.TermRen
 }
 
 func joinParts(a, b string) string {
-	a = trimEmptyLine(a)
-	b = trimEmptyLine(b)
+	a = util.TrimEmptyLine(a)
+	b = util.TrimEmptyLine(b)
 	switch {
 	case a == "" && b == "":
 		return ""
