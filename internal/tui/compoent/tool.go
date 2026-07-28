@@ -164,13 +164,3 @@ func truncateStr(s string, max int) string {
 	}
 	return s[:max] + "..."
 }
-
-// 寻找linesA和linesB的公共前缀
-func findCommonPrefix(linesA []string, linesB []string) []string {
-	minLen := min(len(linesB), len(linesA))
-	i := 0
-	for i < minLen && linesA[i] == linesB[i] {
-		i++
-	}
-	return linesA[:i]
-}

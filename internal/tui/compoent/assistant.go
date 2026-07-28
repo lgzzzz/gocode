@@ -1,8 +1,6 @@
 package compoent
 
 import (
-	"strings"
-
 	"github.com/lgzzzz/gocode/internal/agent"
 	"github.com/lgzzzz/gocode/internal/tui/markdown"
 )
@@ -14,13 +12,10 @@ type AssistantMessage struct {
 	renderWidth int
 	dirty       bool
 	md          *markdown.Renderer
-
-	markdownCache       []string
-	markdownRenderCache []string
 }
 
 func NewAssistantMessage(id, content string) *AssistantMessage {
-	m := &AssistantMessage{id: id, md: markdown.NewRenderer()}
+	m := &AssistantMessage{id: id, md: markdown.NewRenderer(AssistantStyle)}
 	m.SetContent(content)
 	return m
 }
@@ -51,18 +46,5 @@ func (m *AssistantMessage) renderMarkdown(width int) string {
 	if m.content == "" {
 		return ""
 	}
-	out := m.md.Render(m.content, width-2)
-	if m.markdownCache == nil || m.markdownRenderCache == nil {
-		outRender := Render(AssistantStyle, width, out)
-		m.markdownCache = strings.Split(out, "\n")
-		m.markdownRenderCache = strings.Split(outRender, "\n")
-		return outRender
-	}
-	outLines := strings.Split(out, "\n")
-	prefixLines := findCommonPrefix(outLines, m.markdownCache)
-	newOut := strings.Join(outLines[len(prefixLines):], "\n")
-	newRender := Render(AssistantStyle, width, newOut)
-	m.markdownCache = append(m.markdownCache[:len(prefixLines)], strings.Split(newOut, "\n")...)
-	m.markdownRenderCache = append(m.markdownRenderCache[:len(prefixLines)], strings.Split(newRender, "\n")...)
-	return strings.Join(m.markdownRenderCache, "\n")
+	return m.md.Render(m.content, width)
 }
