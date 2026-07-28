@@ -5,7 +5,6 @@ import (
 	"github.com/lgzzzz/gocode/internal/agent"
 )
 
-
 type progressMsg struct {
 	ID         string
 	Type       agent.MsgType

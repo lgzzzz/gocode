@@ -94,6 +94,7 @@ func (m *model) handleProgressMsg(msg progressMsg) []tea.Cmd {
 	if msg.done {
 		m.running = false
 		m.cancel = nil
+		close(m.ch)
 		m.ch = nil
 		return nil
 	}

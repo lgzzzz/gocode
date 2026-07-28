@@ -37,10 +37,12 @@ type model struct {
 	cancel  context.CancelFunc
 	ch      chan progressMsg
 
-	store          *store.Store
-	sessionID      string
-	cwd            string
-	sessionBrowser *sessionbrowser.Browser
+	lastRender time.Time
+
+	store           *store.Store
+	sessionID       string
+	cwd             string
+	sessionBrowser  *sessionbrowser.Browser
 	rollbackTracker *tools.RollbackTracker
 }
 
@@ -104,16 +106,21 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, m.updateOutput(msg)...)
 	case tea.PasteMsg:
 		cmds = append(cmds, m.updateEditor(msg)...)
+		m.adjustLayout()
 	case tea.KeyPressMsg:
 		cmds = append(cmds, m.handleKeyPress(msg)...)
+		m.adjustLayout()
 	case tea.WindowSizeMsg:
 		cmds = append(cmds, m.handleWindowSizeMsg(msg)...)
+		m.adjustLayout()
+		m.renderOutput()
 	case progressMsg:
 		cmds = append(cmds, m.handleProgressMsg(msg)...)
+		if time.Since(m.lastRender) > 25*time.Millisecond || msg.done {
+			m.lastRender = time.Now()
+			m.renderOutput()
+		}
 	}
-
-	m.adjustLayout()
-	m.renderOutput()
 
 	return m, tea.Batch(cmds...)
 }
