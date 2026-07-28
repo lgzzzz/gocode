@@ -122,8 +122,6 @@ func (m *model) cancelAgent() {
 	c := m.getCancel()
 	if c != nil {
 		c()
-		m.setRunning(false)
-		m.setCancel(nil)
 	}
 }
 

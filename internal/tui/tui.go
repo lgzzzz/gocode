@@ -110,6 +110,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyPressMsg:
 		cmds = append(cmds, m.handleKeyPress(msg)...)
 		m.adjustLayout()
+		m.renderOutput()
 	case tea.WindowSizeMsg:
 		cmds = append(cmds, m.handleWindowSizeMsg(msg)...)
 		m.adjustLayout()
