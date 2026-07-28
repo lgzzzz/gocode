@@ -20,6 +20,10 @@ func NewThinkingMessage(id, content string) *ThinkingMessage {
 	return m
 }
 
+func (m *ThinkingMessage) SetFullRender(fullRender bool) {
+	m.md.SetFullRender(fullRender)
+}
+
 func (m *ThinkingMessage) Type() string    { return string(agent.MsgThinking) }
 func (m *ThinkingMessage) MsgID() string   { return m.id }
 func (m *ThinkingMessage) Content() string { return m.content }

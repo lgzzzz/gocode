@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/lgzzzz/gocode/internal/tui/compoent"
-	"github.com/lgzzzz/gocode/internal/tui/markdown"
 )
 
 // ============================================================================
@@ -35,23 +34,23 @@ func TestRender_FullRender(t *testing.T) {
 		t.Fatal("testMarkdown.md is empty")
 	}
 
-	fullRenderer := markdown.NewRenderer(compoent.AssistantStyle)
+	fullRenderer := compoent.NewThinkingMessage("123", "")
+	fullRenderer.SetFullRender(true)
 	const width = 100
 	t1 := time.Now()
 	count := 0
 	for i := 0; i <= len(content)-1; i = i + 10 {
 		count++
-		fullRenderer.Render(content[:i], width)
+		fullRenderer.SetContent(content[:i])
+		fullRenderer.Render(width)
 	}
 	total := time.Since(t1)
 	avg := total / time.Duration(count)
 	fmt.Printf("总耗时: %s\n平均耗时: %s\n调用次数: %d\n", total.String(), avg.String(), count)
-	renderStat := fullRenderer.Stat()
-	fmt.Printf("全量绘制次数:%d\n增量绘制次数:%d\n部分绘制次数: %d\n部分绘制最大长度: %d\n", renderStat.FullRenderCount, renderStat.IncrementRenderCount, renderStat.RenderPartCount, renderStat.MaxRenderContentLength)
-	fmt.Println("部分绘制百分比:", float64(renderStat.MaxRenderContentLength)/float64(len(content))*100, "%")
 
-	// 总耗时: 28.9044823s
-	// 平均耗时: 26.988312ms
+	//总耗时: 30.2409393s
+	//平均耗时: 27.718551ms
+	//调用次数: 1091
 }
 
 func TestRender_Increment(t *testing.T) {
@@ -60,7 +59,7 @@ func TestRender_Increment(t *testing.T) {
 		t.Fatal("testMarkdown.md is empty")
 	}
 
-	incrementRenderer := compoent.NewAssistantMessage("1", "")
+	incrementRenderer := compoent.NewThinkingMessage("123", "")
 	const width = 100
 	t1 := time.Now()
 	count := 0
@@ -73,9 +72,7 @@ func TestRender_Increment(t *testing.T) {
 	avg := total / time.Duration(count)
 	fmt.Printf("总耗时: %s\n平均耗时: %s\n调用次数: %d\n", total.String(), avg.String(), count)
 
-	// 总耗时: 10.367235s
-	// 平均耗时: 9.679957ms
-
-	// 总耗时: 2.9922679s
-	// 平均耗时: 2.7939ms
+	//总耗时: 3.6788687s
+	//平均耗时: 3.372015ms
+	//调用次数: 1091
 }
