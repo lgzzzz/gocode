@@ -1,7 +1,10 @@
 package tui
 
 import (
+	"time"
+
 	tea "charm.land/bubbletea/v2"
+
 	"github.com/lgzzzz/gocode/internal/agent"
 )
 
@@ -17,12 +20,22 @@ type progressMsg struct {
 	err        error
 }
 
-func waitCmd(ch chan progressMsg) tea.Cmd {
+// tickMsg is sent every 25ms to trigger a UI render during agent processing.
+type tickMsg struct{}
+
+// agentDoneMsg is sent when the agent finishes processing and the ticker stops.
+type agentDoneMsg struct{}
+
+func timerCmd(interval time.Duration) tea.Cmd {
 	return func() tea.Msg {
-		msg, ok := <-ch
-		if !ok {
-			return nil
-		}
-		return msg
+		time.Sleep(interval)
+		return tickMsg{}
+	}
+}
+
+func agentDoneCmd(done <-chan struct{}) tea.Cmd {
+	return func() tea.Msg {
+		<-done
+		return agentDoneMsg{}
 	}
 }

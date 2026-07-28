@@ -3,7 +3,7 @@ package tui
 import tea "charm.land/bubbletea/v2"
 
 func (m *model) updateEditor(msg tea.Msg) []tea.Cmd {
-	if m.running {
+	if m.Running() {
 		return nil
 	}
 	newEditor, cmd := m.editor.Update(msg)

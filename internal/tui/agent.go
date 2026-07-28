@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"fmt"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -12,7 +13,7 @@ import (
 	"github.com/lgzzzz/gocode/internal/tui/compoent"
 )
 
-func (m *model) StartAgent(input string) tea.Cmd {
+func (m *model) StartAgent(input string) []tea.Cmd {
 	// Clear rollback tracker for the new agent interaction
 	m.rollbackTracker.Clear()
 
@@ -22,8 +23,8 @@ func (m *model) StartAgent(input string) tea.Cmd {
 	m.cancel = cancel
 
 	ch := make(chan progressMsg, 64)
-	m.ch = ch
 
+	// Agent goroutine: runs the LLM call and feeds progress messages into ch.
 	go func(ag *agent.Agent, input string) {
 		defer func() {
 			if r := recover(); r != nil {
@@ -47,10 +48,33 @@ func (m *model) StartAgent(input string) tea.Cmd {
 		close(ch)
 	}(m.agent, input)
 
-	return waitCmd(ch)
+	// doneCh signals the ticker to stop and emit a final agentDoneMsg.
+	doneCh := make(chan struct{})
+
+	// Background processor: drains ch and updates history in real time.
+	go func() {
+		for msg := range ch {
+			m.handleProgressMsg(msg)
+			if msg.done {
+				m.mutex.Lock()
+				m.running = false
+				m.cancel = nil
+				m.mutex.Unlock()
+				close(doneCh)
+				return
+			}
+		}
+
+	}()
+
+	return []tea.Cmd{timerCmd(25 * time.Millisecond), agentDoneCmd(doneCh)}
 }
 
-func (m *model) Running() bool { return m.running }
+func (m *model) Running() bool {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+	return m.running
+}
 
 func (m *model) SystemPrompt() string { return m.agent.SystemPrompt() }
 
@@ -79,25 +103,28 @@ func (m *model) RollbackConversation() (rollBacked bool) {
 }
 
 func (m *model) cancelAgent() {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
 	if m.cancel != nil {
 		m.cancel()
+		m.running = false
 		m.cancel = nil
 	}
 }
 
-func (m *model) handleProgressMsg(msg progressMsg) []tea.Cmd {
+// handleProgressMsg is called from the background processor goroutine.
+// It updates the history and persists messages. State cleanup on completion
+// (running=false, etc.) is handled in the Update loop upon receiving agentDoneMsg.
+func (m *model) handleProgressMsg(msg progressMsg) {
 	if msg.err != nil {
 		m.history.Append(compoent.NewErrorMessage(msg.err.Error()))
-		return nil
+		return
 	}
 
 	if msg.done {
-		m.running = false
-		m.cancel = nil
-		close(m.ch)
-		m.ch = nil
-		return nil
+		return
 	}
+
 	m.persistMessage(msg)
 	switch msg.Type {
 	case agent.MsgAssistantStream:
@@ -112,11 +139,6 @@ func (m *model) handleProgressMsg(msg progressMsg) []tea.Cmd {
 	case agent.MsgError, agent.MsgRetryWait:
 		m.history.Append(compoent.NewErrorMessage(msg.Content))
 	}
-
-	if m.ch != nil {
-		return []tea.Cmd{waitCmd(m.ch)}
-	}
-	return nil
 }
 
 func (m *model) persistMessage(msg progressMsg) {

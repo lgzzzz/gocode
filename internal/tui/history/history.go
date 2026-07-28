@@ -1,20 +1,30 @@
 package history
 
-import "github.com/lgzzzz/gocode/internal/tui/compoent"
+import (
+	"sync"
+
+	"github.com/lgzzzz/gocode/internal/tui/compoent"
+)
 
 type History struct {
+	mu    sync.Mutex
 	items []compoent.Component
 	dirty bool
 }
 
 func (h *History) Append(c compoent.Component) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
 	h.items = append(h.items, c)
 	h.dirty = true
 }
 
 func (h *History) Upsert(c compoent.Component) bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
 	if c.MsgID() == "" {
-		h.Append(c)
+		h.items = append(h.items, c)
+		h.dirty = true
 		return false
 	}
 	for i := len(h.items) - 1; i >= 0; i-- {
@@ -24,11 +34,14 @@ func (h *History) Upsert(c compoent.Component) bool {
 			return true
 		}
 	}
-	h.Append(c)
+	h.items = append(h.items, c)
+	h.dirty = true
 	return false
 }
 
 func (h *History) UpdateToolResult(id, result string, hasErr bool) bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
 	for i := len(h.items) - 1; i >= 0; i-- {
 		if h.items[i].MsgID() == id && h.items[i].Type() == "tool" {
 			if tm, ok := h.items[i].(*compoent.ToolMessage); ok {
@@ -45,12 +58,16 @@ func (h *History) UpdateToolResult(id, result string, hasErr bool) bool {
 }
 
 func (h *History) Len() int {
+	h.mu.Lock()
+	defer h.mu.Unlock()
 	return len(h.items)
 }
 
 // TruncateFromLastUser removes the last user message and everything after it.
 // Returns the number of items removed (0 if no user message found).
 func (h *History) TruncateFromLastUser() int {
+	h.mu.Lock()
+	defer h.mu.Unlock()
 	// Find the index of the last user message
 	lastUserIdx := -1
 	for i := len(h.items) - 1; i >= 0; i-- {
@@ -69,15 +86,21 @@ func (h *History) TruncateFromLastUser() int {
 }
 
 func (h *History) Clear() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
 	h.items = nil
 	h.dirty = true
 }
 
 func (h *History) MarkDirty() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
 	h.dirty = true
 }
 
 func (h *History) Render(width int) (lines []string, ok bool) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
 	if !h.dirty {
 		return nil, false
 	}

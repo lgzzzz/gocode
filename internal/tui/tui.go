@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"charm.land/bubbles/v2/key"
@@ -24,6 +25,8 @@ import (
 )
 
 type model struct {
+	mutex sync.Mutex
+
 	editor  textarea.Model
 	output  viewport.Model
 	agent   *agent.Agent
@@ -35,9 +38,6 @@ type model struct {
 
 	running bool
 	cancel  context.CancelFunc
-	ch      chan progressMsg
-
-	lastRender time.Time
 
 	store           *store.Store
 	sessionID       string
@@ -91,14 +91,14 @@ func NewModel(ag *agent.Agent, st *store.Store) tea.Model {
 		rollbackTracker: rollbackTracker,
 	}
 	m.adjustLayout()
-	return m
+	return &m
 }
 
-func (m model) Init() tea.Cmd {
+func (m *model) Init() tea.Cmd {
 	return m.editor.Focus()
 }
 
-func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 
 	switch msg := msg.(type) {
@@ -114,18 +114,19 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, m.handleWindowSizeMsg(msg)...)
 		m.adjustLayout()
 		m.renderOutput()
-	case progressMsg:
-		cmds = append(cmds, m.handleProgressMsg(msg)...)
-		if time.Since(m.lastRender) > 25*time.Millisecond || msg.done {
-			m.lastRender = time.Now()
-			m.renderOutput()
+	case tickMsg:
+		m.renderOutput()
+		if m.Running() {
+			cmds = append(cmds, timerCmd(25*time.Millisecond))
 		}
+	case agentDoneMsg:
+		m.renderOutput()
 	}
 
 	return m, tea.Batch(cmds...)
 }
 
-func (m model) View() tea.View {
+func (m *model) View() tea.View {
 	v := tea.NewView("")
 	v.AltScreen = true
 	v.MouseMode = tea.MouseModeAllMotion
@@ -141,7 +142,7 @@ func (m model) View() tea.View {
 	}
 
 	var editorArea string
-	if m.running {
+	if m.Running() {
 		editorArea = inputBarDimStyle.Render("⏳ Processing... (Esc to stop)")
 	} else {
 		if m.palette.Active() {
@@ -160,7 +161,7 @@ func (m model) View() tea.View {
 		editorArea,
 	))
 
-	if !m.running {
+	if !m.Running() {
 		if c := m.editor.Cursor(); c != nil {
 			c.Position.Y += m.output.Height() + 1
 			if m.palette.Active() {
@@ -229,7 +230,7 @@ func (m *model) handlePaletteKey(msg tea.KeyPressMsg) (consumed bool, cmds []tea
 		args := m.palette.Args(result.Execute.Name())
 		m.palette.Dismiss()
 		m.editor.Reset()
-		return true, []tea.Cmd{m.executeCommand(result.Execute, args)}
+		return true, m.executeCommand(result.Execute, args)
 	case result.CompleteText != "":
 		m.editor.SetValue(result.CompleteText)
 		m.editor.CursorEnd()
@@ -252,13 +253,13 @@ func (m *model) handleEditingKey(msg tea.KeyPressMsg) (cmds []tea.Cmd) {
 	case "ctrl+c":
 		return append(cmds, tea.Quit)
 	case "esc":
-		if m.running {
+		if m.Running() {
 			m.cancelAgent()
 		}
 		return cmds
 	case "enter":
 		if cmd := m.submitInput(); cmd != nil {
-			cmds = append(cmds, cmd)
+			cmds = append(cmds, cmd...)
 		}
 		return cmds
 	}
@@ -271,8 +272,8 @@ func (m *model) handleEditingKey(msg tea.KeyPressMsg) (cmds []tea.Cmd) {
 }
 
 // submitInput validates, persists, and submits the user's input to the agent.
-func (m *model) submitInput() tea.Cmd {
-	if m.running {
+func (m *model) submitInput() []tea.Cmd {
+	if m.Running() {
 		return nil
 	}
 	input := strings.TrimSpace(m.editor.Value())
@@ -301,7 +302,7 @@ func (m *model) persistUserInput(input string) {
 	})
 }
 
-func (m *model) executeCommand(cmd command.Executor, args string) tea.Cmd {
+func (m *model) executeCommand(cmd command.Executor, args string) []tea.Cmd {
 	env := &command.Env{
 		TUI: m,
 	}
