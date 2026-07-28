@@ -15,12 +15,10 @@ import (
 	"github.com/lgzzzz/gocode/internal/store"
 )
 
-
 type SessionStore interface {
 	ListSessions(limit int) ([]store.Session, error)
 	GetSessionMessages(sessionID string) ([]store.Message, error)
 }
-
 
 type sessionItem struct {
 	Session store.Session
@@ -29,7 +27,6 @@ type sessionItem struct {
 func (si sessionItem) FilterValue() string {
 	return si.Session.FirstMsg
 }
-
 
 var (
 	sessionItemStyle = lipgloss.NewStyle().
@@ -47,7 +44,6 @@ var (
 			BorderStyle(lipgloss.ThickBorder()).
 			BorderForeground(lipgloss.Color("8"))
 )
-
 
 type sessionDelegate struct{}
 
@@ -93,7 +89,6 @@ func (d sessionDelegate) Update(msg tea.Msg, m *list.Model) tea.Cmd {
 	return nil
 }
 
-
 type Browser struct {
 	list   list.Model
 	store  SessionStore
@@ -127,7 +122,6 @@ func New(width, height int, store SessionStore) *Browser {
 	return &Browser{list: l, store: store}
 }
 
-
 func (b *Browser) SetActive(active bool) {
 	b.active = active
 }
@@ -140,12 +134,11 @@ func (b *Browser) IsEmpty() bool {
 	return len(b.list.Items()) == 0
 }
 
-
 func (b *Browser) Reload() error {
 	if b.store == nil {
 		return errors.New("session store is unavailable")
 	}
-	sessions, err := b.store.ListSessions(50)
+	sessions, err := b.store.ListSessions(-1)
 	if err != nil {
 		return err
 	}
@@ -177,7 +170,6 @@ func (b *Browser) Selected() *store.Session {
 func (b *Browser) GetMessages(sessionID string) ([]store.Message, error) {
 	return b.store.GetSessionMessages(sessionID)
 }
-
 
 func (b *Browser) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	newList, cmd := b.list.Update(msg)
