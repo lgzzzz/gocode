@@ -17,10 +17,10 @@ func (m *model) StartAgent(input string) []tea.Cmd {
 	// Clear rollback tracker for the new agent interaction
 	m.rollbackTracker.Clear()
 
-	m.running = true
+	m.setRunning(true)
 
 	ctx, cancel := context.WithCancel(context.Background())
-	m.cancel = cancel
+	m.setCancel(cancel)
 
 	ch := make(chan progressMsg, 64)
 
@@ -56,10 +56,8 @@ func (m *model) StartAgent(input string) []tea.Cmd {
 		for msg := range ch {
 			m.handleProgressMsg(msg)
 			if msg.done {
-				m.mutex.Lock()
-				m.running = false
-				m.cancel = nil
-				m.mutex.Unlock()
+				m.setRunning(false)
+				m.setCancel(nil)
 				close(doneCh)
 				return
 			}
@@ -74,6 +72,24 @@ func (m *model) Running() bool {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 	return m.running
+}
+
+func (m *model) setRunning(val bool) {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+	m.running = val
+}
+
+func (m *model) getCancel() context.CancelFunc {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+	return m.cancel
+}
+
+func (m *model) setCancel(c context.CancelFunc) {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+	m.cancel = c
 }
 
 func (m *model) SystemPrompt() string { return m.agent.SystemPrompt() }
@@ -103,12 +119,11 @@ func (m *model) RollbackConversation() (rollBacked bool) {
 }
 
 func (m *model) cancelAgent() {
-	m.mutex.Lock()
-	defer m.mutex.Unlock()
-	if m.cancel != nil {
-		m.cancel()
-		m.running = false
-		m.cancel = nil
+	c := m.getCancel()
+	if c != nil {
+		c()
+		m.setRunning(false)
+		m.setCancel(nil)
 	}
 }
 
