@@ -66,6 +66,8 @@ gocode/
 │           └── string.go      # ANSI-aware string utilities (trim, empty checks)
 ├── .gocode/
 │   └── AGENTS.md              # This file (auto-loaded as additional system prompt context)
+├── README.md                 # Chinese user documentation
+├── README.en.md              # English user documentation
 ├── go.mod
 ├── go.sum
 └── .gitignore
@@ -207,3 +209,5 @@ Stores sessions and messages as JSONL files under `~/.gocode/sessions/<cwd-hash>
 9. **Tool result display:** Tool results in the TUI are truncated to 6 lines with an "...N more lines..." indicator for long outputs.
 
 10. **Edit tool line endings:** The edit tool normalizes all line endings to LF (`\n`) before performing replacements, converting both CRLF and CR to LF.
+
+11. **Bilingual README:** The project includes both Chinese (`README.md`) and English (`README.en.md`) user-facing documentation. Code, comments, and AGENTS.md remain in English.
