@@ -109,7 +109,7 @@ func (r *Renderer) render(content string) string {
 		return fullRender()
 	}
 
-	if r.contentWidth != r.lastContentWidth || !strings.HasPrefix(content, r.stablePrefix) {
+	if r.stablePrefix == "" || r.contentWidth != r.lastContentWidth || !strings.HasPrefix(content, r.stablePrefix) {
 		r.Reset()
 		r.lastContentWidth = r.contentWidth
 		out := fullRender()
