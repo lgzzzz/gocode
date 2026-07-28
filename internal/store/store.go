@@ -142,28 +142,54 @@ func (s *Store) loadSessionFile(filePath string) {
 	scanner := bufio.NewScanner(f)
 	scanner.Buffer(make([]byte, 0, 256*1024), 16*1024*1024)
 
+	if !scanner.Scan() {
+		return
+	}
+	line := scanner.Bytes()
+	var sess Session
+	if err := json.Unmarshal(line, &sess); err != nil {
+		return
+	}
+	s.sessions[sess.SessionID] = &sess
+}
+
+// loadMessages loads all messages for a session from disk into memory.
+// Must be called with s.mu held. Safe to call multiple times — subsequent
+// calls are no-ops if messages are already loaded.
+func (s *Store) loadMessages(sessionID string) {
+	if _, ok := s.messages[sessionID]; ok {
+		return // already loaded
+	}
+
+	filePath := filepath.Join(s.dir, sessionFileName(sessionID))
+	f, err := os.Open(filePath)
+	if err != nil {
+		s.messages[sessionID] = []Message{}
+		return
+	}
+	defer f.Close()
+
+	scanner := bufio.NewScanner(f)
+	scanner.Buffer(make([]byte, 0, 256*1024), 16*1024*1024)
+
 	lineNum := 0
-	var sessionID string
+	var msgs []Message
 	for scanner.Scan() {
-		line := scanner.Bytes()
 		if lineNum == 0 {
-			var sess Session
-			if err := json.Unmarshal(line, &sess); err != nil {
-				return
-			}
-			s.sessions[sess.SessionID] = &sess
-			sessionID = sess.SessionID
-		} else {
-			var msg Message
-			if err := json.Unmarshal(line, &msg); err == nil {
-				s.messages[sessionID] = append(s.messages[sessionID], msg)
-			}
+			lineNum++
+			continue // skip session metadata line
+		}
+		line := scanner.Bytes()
+		var msg Message
+		if err := json.Unmarshal(line, &msg); err == nil {
+			msgs = append(msgs, msg)
 		}
 		lineNum++
 	}
-	sort.Slice(s.messages[sessionID], func(i, j int) bool {
-		return s.messages[sessionID][i].CreatedAt < s.messages[sessionID][j].CreatedAt
+	sort.Slice(msgs, func(i, j int) bool {
+		return msgs[i].CreatedAt < msgs[j].CreatedAt
 	})
+	s.messages[sessionID] = msgs
 }
 
 func (s *Store) Close() error {
@@ -222,6 +248,8 @@ func (s *Store) AppendMessage(msg Message) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	s.loadMessages(msg.SessionID)
+
 	msg.CreatedAt = time.Now().Format(time.RFC3339)
 
 	s.messages[msg.SessionID] = append(s.messages[msg.SessionID], msg)
@@ -247,6 +275,8 @@ func (s *Store) AppendMessage(msg Message) error {
 func (s *Store) TruncateMessagesFromLastUser(sessionID string) int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
+	s.loadMessages(sessionID)
 
 	msgs := s.messages[sessionID]
 	if len(msgs) == 0 {
@@ -277,10 +307,8 @@ func (s *Store) GetSessionMessages(sessionID string) ([]Message, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	s.loadMessages(sessionID)
 	msgs := s.messages[sessionID]
-	if msgs == nil {
-		return []Message{}, nil
-	}
 	out := make([]Message, len(msgs))
 	copy(out, msgs)
 	return out, nil
