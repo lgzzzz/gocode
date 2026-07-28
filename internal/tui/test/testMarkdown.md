@@ -93,7 +93,7 @@ There is currently no dedicated test suite. Manual verification is done by runni
 ### General
 - **Language:** All identifiers, comments, and documentation use **English**.
 - **Package naming:** Lowercase, single-word where possible (`agent`, `command`, `tools`, `store`, `tui`).
-- **File naming:** Lowercase with underscores only when necessary (`sessionbrowser.go`).
+- **File naming:** Lowercase with underscores only when necessary (`../sessionbrowser/sessionbrowser.go`).
 - **Error handling:** Errors are returned as values and handled explicitly. The agent reports errors via `CallbackMsg` with type `MsgError`; tools return errors as formatted strings.
 
 ### Naming Conventions

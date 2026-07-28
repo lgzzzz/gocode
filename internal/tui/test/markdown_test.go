@@ -1,4 +1,4 @@
-package sessionbrowser
+package test
 
 import (
 	"fmt"
@@ -35,16 +35,13 @@ func TestRender_FullRender(t *testing.T) {
 		t.Fatal("testMarkdown.md is empty")
 	}
 
-	fullRenderer := markdown.NewRenderer()
-	fullRenderer.SetFullRender(true)
+	fullRenderer := markdown.NewRenderer(compoent.AssistantStyle)
 	const width = 100
 	t1 := time.Now()
 	count := 0
 	for i := 0; i <= len(content)-1; i = i + 10 {
 		count++
-		//fullRenderer.Render(content[:i], width)
-		renderText := fullRenderer.Render(content[:i], width)
-		compoent.Render(compoent.AssistantStyle, width, renderText)
+		fullRenderer.Render(content[:i], width)
 	}
 	total := time.Since(t1)
 	avg := total / time.Duration(count)

@@ -101,9 +101,9 @@ func (r *Renderer) render(content string) string {
 		r.renderStatus.FullRenderCount++
 		out, err := r.gr.Render(content)
 		if err != nil {
-			return util.TrimEmptyLine(styled.Render(content))
+			return styled.Render(util.TrimEmptyLine(content))
 		}
-		return util.TrimEmptyLine(styled.Render(out))
+		return styled.Render(util.TrimEmptyLine(out))
 	}
 	if r.fullRender {
 		return fullRender()
@@ -149,9 +149,17 @@ func (r *Renderer) renderPart(text string) string {
 	}
 	out, err := r.gr.Render(text)
 	if err != nil {
-		return text
+		text = util.TrimEmptyLine(text)
+		if text == "" {
+			return ""
+		}
+		return r.style.Width(r.displayWidth).Render(text)
 	}
-	return out
+	out = util.TrimEmptyLine(out)
+	if out == "" {
+		return ""
+	}
+	return r.style.Width(r.displayWidth).Render(out)
 }
 
 func (r *Renderer) tryCachePrefix(content string) {
@@ -167,14 +175,12 @@ func (r *Renderer) tryCachePrefix(content string) {
 	}
 	styled := r.style.Width(r.displayWidth)
 	r.stablePrefix = prefix
-	r.stablePrefixRender = styled.Render(out)
+	r.stablePrefixRender = styled.Render(util.TrimEmptyLine(out))
 }
 
 // joinParts 将两段已应用 lipgloss style 的渲染结果拼接。
 // 使用单个 \n 而非 \n\n，因为每行已带有左侧边框，空行会破坏边框连续性。
 func (r *Renderer) joinParts(a, b string) string {
-	a = util.TrimEmptyLine(a)
-	a = util.TrimEmptyLine(b)
 	switch {
 	case a == "" && b == "":
 		return ""
@@ -183,7 +189,7 @@ func (r *Renderer) joinParts(a, b string) string {
 	case b == "":
 		return a
 	default:
-		return a + r.style.Width(r.displayWidth).Render("\n\n") + (b)
+		return a + "\n" + r.style.Render(" ") + "\n" + b
 	}
 }
 
