@@ -194,7 +194,7 @@ func (r *Renderer) tryCachePrefix(content string) {
 	r.stablePrefix = prefix
 	styled := r.style.Width(r.displayWidth)
 	if r.fullStyleRender {
-		r.stablePrefixRender = out
+		r.stablePrefixRender = util.TrimEmptyLine(out)
 		return
 	}
 	r.stablePrefixRender = styled.Render(util.TrimEmptyLine(out))
@@ -212,7 +212,7 @@ func (r *Renderer) joinParts(a, b string) string {
 		return a
 	default:
 		line := ""
-		if !r.fullRender {
+		if !r.fullStyleRender {
 			line = r.style.Render(" ")
 		}
 		return a + "\n" + line + "\n" + b
