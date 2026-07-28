@@ -24,6 +24,10 @@ func (m *AssistantMessage) SetFullRender(fullRender bool) {
 	m.md.SetFullRender(fullRender)
 }
 
+func (m *AssistantMessage) SetFullStyleRender(fullRender bool) {
+	m.md.SetFullStyleRender(fullRender)
+}
+
 func (m *AssistantMessage) Type() string    { return string(agent.MsgAssistant) }
 func (m *AssistantMessage) MsgID() string   { return m.id }
 func (m *AssistantMessage) Content() string { return m.content }

@@ -42,6 +42,7 @@ type Renderer struct {
 	stablePrefixRender string
 	split              splitDetector
 	fullRender         bool
+	fullStyleRender    bool
 
 	style lipgloss.Style
 	gr    *glamour.TermRenderer
@@ -59,6 +60,10 @@ func (r *Renderer) SetFullRender(fullRender bool) {
 	r.fullRender = fullRender
 }
 
+func (r *Renderer) SetFullStyleRender(fullRender bool) {
+	r.fullStyleRender = fullRender
+}
+
 // Render 将 markdown 文本渲染为带 ANSI 样式的终端字符串。
 // 流式场景下，如果 content 只是在上次渲染的基础上追加了内容，则只渲染新增部分。
 func (r *Renderer) Render(content string, width int) string {
@@ -69,7 +74,11 @@ func (r *Renderer) Render(content string, width int) string {
 	r.contentWidth = width - 2
 	r.displayWidth = width
 	r.ensureGR()
-	return r.render(content)
+	out := r.render(content)
+	if r.fullStyleRender {
+		return r.style.Width(r.displayWidth).Render(out)
+	}
+	return out
 }
 
 // ensureGR 确保 r.gr 为当前 contentWidth 对应的 glamour 渲染器。
@@ -101,7 +110,13 @@ func (r *Renderer) render(content string) string {
 		r.renderStatus.FullRenderCount++
 		out, err := r.gr.Render(content)
 		if err != nil {
+			if r.fullStyleRender {
+				return util.TrimEmptyLine(content)
+			}
 			return styled.Render(util.TrimEmptyLine(content))
+		}
+		if r.fullStyleRender {
+			return util.TrimEmptyLine(out)
 		}
 		return styled.Render(util.TrimEmptyLine(out))
 	}
@@ -159,6 +174,9 @@ func (r *Renderer) renderPart(text string) string {
 	if out == "" {
 		return ""
 	}
+	if r.fullStyleRender {
+		return out
+	}
 	return r.style.Width(r.displayWidth).Render(out)
 }
 
@@ -173,8 +191,12 @@ func (r *Renderer) tryCachePrefix(content string) {
 	if err != nil {
 		return
 	}
-	styled := r.style.Width(r.displayWidth)
 	r.stablePrefix = prefix
+	styled := r.style.Width(r.displayWidth)
+	if r.fullStyleRender {
+		r.stablePrefixRender = out
+		return
+	}
 	r.stablePrefixRender = styled.Render(util.TrimEmptyLine(out))
 }
 
@@ -189,7 +211,11 @@ func (r *Renderer) joinParts(a, b string) string {
 	case b == "":
 		return a
 	default:
-		return a + "\n" + r.style.Render(" ") + "\n" + b
+		line := ""
+		if !r.fullRender {
+			line = r.style.Render(" ")
+		}
+		return a + "\n" + line + "\n" + b
 	}
 }
 
