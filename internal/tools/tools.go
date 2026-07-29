@@ -354,9 +354,6 @@ func AllTools() (map[string]ToolExecutor, []ToolDef) {
 			Name:          "bash",
 			Description:   "Execute a shell command on Linux/Unix systems. Runs via bash. Returns stdout and stderr combined.",
 			PromptSnippet: "Execute shell commands on Linux/Unix systems.",
-			PromptGuidelines: []string{
-				"You cannot run sudo commands. When one is needed, list the command for the user to execute manually and ask them to share the result with you.",
-			},
 			Parameters: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
