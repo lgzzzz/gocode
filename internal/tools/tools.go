@@ -1,21 +1,18 @@
 package tools
 
 import (
-	"encoding/json"
-	"fmt"
-	"os"
-	"os/exec"
 	"runtime"
 	"strings"
-	"time"
 )
 
+// ToolExecutor is the interface that all tools must implement.
 type ToolExecutor interface {
 	Execute(argsJSON string) (string, error)
 	Name() string
 	SetTracker(tracker *RollbackTracker)
 }
 
+// ToolDef describes a tool for the LLM system prompt and API function definitions.
 type ToolDef struct {
 	Name             string
 	Description      string
@@ -24,244 +21,7 @@ type ToolDef struct {
 	PromptGuidelines []string
 }
 
-type ReadTool struct{}
-
-func (t *ReadTool) Name() string                        { return "read" }
-func (t *ReadTool) SetTracker(tracker *RollbackTracker) {} // read does not modify anything
-
-type readArgs struct {
-	Path   string `json:"path"`
-	Offset int    `json:"offset,omitempty"`
-	Limit  int    `json:"limit,omitempty"`
-}
-
-func (t *ReadTool) Execute(argsJSON string) (string, error) {
-	var args readArgs
-	if err := json.Unmarshal([]byte(argsJSON), &args); err != nil {
-		return "", fmt.Errorf("read: bad arguments: %w", err)
-	}
-	if args.Path == "" {
-		return "", fmt.Errorf("read: path is required")
-	}
-	info, err := os.Stat(args.Path)
-	if err != nil {
-		return "", fmt.Errorf("read %s: %w", args.Path, err)
-	}
-	if info.IsDir() {
-		return "", fmt.Errorf("read: %s is a directory, not a file", args.Path)
-	}
-	data, err := os.ReadFile(args.Path)
-	if err != nil {
-		return "", fmt.Errorf("read %s: %w", args.Path, err)
-	}
-	lines := strings.Split(string(data), "\n")
-	if args.Offset > 0 {
-		if args.Offset > len(lines) {
-			return "", fmt.Errorf("read: offset %d exceeds file length %d lines", args.Offset, len(lines))
-		}
-		lines = lines[args.Offset-1:]
-	}
-	if args.Limit > 0 && args.Limit < len(lines) {
-		lines = lines[:args.Limit]
-	}
-	result := strings.Join(lines, "\n")
-	if len(result) > 50000 {
-		result = result[:50000] + "\n... [truncated]"
-	}
-	return result, nil
-}
-
-type WriteTool struct {
-	tracker *RollbackTracker
-}
-
-func (t *WriteTool) Name() string                        { return "write" }
-func (t *WriteTool) SetTracker(tracker *RollbackTracker) { t.tracker = tracker }
-
-type writeArgs struct {
-	Path    string `json:"path"`
-	Content string `json:"content"`
-}
-
-func (t *WriteTool) Execute(argsJSON string) (string, error) {
-	var args writeArgs
-	if err := json.Unmarshal([]byte(argsJSON), &args); err != nil {
-		return "", fmt.Errorf("write: bad arguments: %w", err)
-	}
-	if args.Path == "" {
-		return "", fmt.Errorf("write: path is required")
-	}
-	var oldContent []byte
-	existed := false
-	if info, err := os.Stat(args.Path); err == nil && !info.IsDir() {
-		existed = true
-		oldContent, _ = os.ReadFile(args.Path)
-	}
-	t.tracker.RecordFileWrite(args.Path, oldContent, existed)
-	if err := os.MkdirAll(dirOf(args.Path), 0755); err != nil {
-		return "", fmt.Errorf("write: %w", err)
-	}
-	if err := os.WriteFile(args.Path, []byte(args.Content), 0644); err != nil {
-		return "", fmt.Errorf("write %s: %w", args.Path, err)
-	}
-	return fmt.Sprintf("Wrote %d bytes to %s", len(args.Content), args.Path), nil
-}
-
-type EditTool struct {
-	tracker *RollbackTracker
-}
-
-func (t *EditTool) Name() string                        { return "edit" }
-func (t *EditTool) SetTracker(tracker *RollbackTracker) { t.tracker = tracker }
-
-type editArgs struct {
-	Path    string `json:"path"`
-	OldText string `json:"oldText"`
-	NewText string `json:"newText"`
-}
-
-func (t *EditTool) Execute(argsJSON string) (string, error) {
-	var args editArgs
-	if err := json.Unmarshal([]byte(argsJSON), &args); err != nil {
-		return "", fmt.Errorf("edit: bad arguments: %w", err)
-	}
-	if args.Path == "" {
-		return "", fmt.Errorf("edit: path is required")
-	}
-	if args.OldText == "" {
-		return "", fmt.Errorf("edit: oldText is required")
-	}
-	info, err := os.Stat(args.Path)
-	if err != nil {
-		return "", fmt.Errorf("edit: %w", err)
-	}
-	if info.IsDir() {
-		return "", fmt.Errorf("edit: %s is a directory, not a file", args.Path)
-	}
-	data, err := os.ReadFile(args.Path)
-	if err != nil {
-		return "", fmt.Errorf("edit: %w", err)
-	}
-
-	// Record original file state for rollback
-	t.tracker.RecordFileWrite(args.Path, data, true)
-
-	content := string(data)
-	content = strings.ReplaceAll(content, "\r\n", "\n")
-	content = strings.ReplaceAll(content, "\r", "\n")
-	count := strings.Count(content, args.OldText)
-	if count == 0 {
-		return "", fmt.Errorf("edit: oldText not found in %s", args.Path)
-	}
-	if count > 1 {
-		return "", fmt.Errorf("edit: oldText matches %d times in %s — must be unique", count, args.Path)
-	}
-	newContent := strings.Replace(content, args.OldText, args.NewText, 1)
-	if err := os.WriteFile(args.Path, []byte(newContent), 0644); err != nil {
-		return "", fmt.Errorf("edit %s: %w", args.Path, err)
-	}
-	return fmt.Sprintf("Edited %s: replaced 1 occurrence", args.Path), nil
-}
-
-type BashTool struct {
-	tracker *RollbackTracker
-}
-
-func (t *BashTool) Name() string                        { return "bash" }
-func (t *BashTool) SetTracker(tracker *RollbackTracker) { t.tracker = tracker }
-
-type bashArgs struct {
-	Command string `json:"command"`
-	Timeout int    `json:"timeout,omitempty"`
-}
-
-func (t *BashTool) Execute(argsJSON string) (string, error) {
-	var args bashArgs
-	if err := json.Unmarshal([]byte(argsJSON), &args); err != nil {
-		return "", fmt.Errorf("bash: bad arguments: %w", err)
-	}
-	if args.Command == "" {
-		return "", fmt.Errorf("bash: command is required")
-	}
-	result, err := runShellCommand(args.Command, args.Timeout, "bash", buildLinuxShellCmd)
-	t.tracker.RecordShellCommand(args.Command, result)
-	return result, err
-}
-
-func buildLinuxShellCmd(command string) *exec.Cmd {
-	if _, err := exec.LookPath("bash"); err == nil {
-		return exec.Command("bash", "-c", command)
-	}
-	return exec.Command("sh", "-c", command)
-}
-
-type PowershellTool struct {
-	tracker *RollbackTracker
-}
-
-func (t *PowershellTool) Name() string                        { return "powershell" }
-func (t *PowershellTool) SetTracker(tracker *RollbackTracker) { t.tracker = tracker }
-
-type powershellArgs struct {
-	Command string `json:"command"`
-	Timeout int    `json:"timeout,omitempty"`
-}
-
-func (t *PowershellTool) Execute(argsJSON string) (string, error) {
-	var args powershellArgs
-	if err := json.Unmarshal([]byte(argsJSON), &args); err != nil {
-		return "", fmt.Errorf("powershell: bad arguments: %w", err)
-	}
-	if args.Command == "" {
-		return "", fmt.Errorf("powershell: command is required")
-	}
-	result, err := runShellCommand(args.Command, args.Timeout, "powershell", buildWindowsShellCmd)
-	t.tracker.RecordShellCommand(args.Command, result)
-	return result, err
-}
-
-func buildWindowsShellCmd(command string) *exec.Cmd {
-	if _, err := exec.LookPath("powershell.exe"); err == nil {
-		wrappedCmd := "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; " + command
-		return exec.Command("powershell", "-NoProfile", "-NonInteractive", "-Command", wrappedCmd)
-	}
-	return exec.Command("cmd", "/c", command)
-}
-
-func runShellCommand(command string, timeoutSec int, toolName string, buildCmd func(string) *exec.Cmd) (string, error) {
-	timeout := 30
-	if timeoutSec > 0 {
-		timeout = timeoutSec
-	}
-	cmd := buildCmd(command)
-	var out strings.Builder
-	cmd.Stdout = &out
-	cmd.Stderr = &out
-
-	done := make(chan error, 1)
-	go func() { done <- cmd.Run() }()
-
-	select {
-	case err := <-done:
-		result := out.String()
-		if len(result) > 10000 {
-			result = result[:10000] + "\n... [truncated]"
-		}
-		if err != nil {
-			return fmt.Sprintf("exit %v\n%s", err, result), nil
-		}
-		if result == "" {
-			result = "(no output)"
-		}
-		return result, nil
-	case <-time.After(time.Duration(timeout) * time.Second):
-		if cmd.Process != nil {
-			cmd.Process.Kill()
-		}
-		return fmt.Sprintf("(timed out after %ds)\n%s", timeout, out.String()), nil
-	}
-}
-
+// dirOf returns the parent directory of a file path.
 func dirOf(path string) string {
 	if idx := strings.LastIndex(path, "/"); idx >= 0 {
 		return path[:idx]
@@ -269,6 +29,7 @@ func dirOf(path string) string {
 	return "."
 }
 
+// AllTools returns the map of tool executors and their definitions.
 func AllTools() (map[string]ToolExecutor, []ToolDef) {
 	tools := map[string]ToolExecutor{
 		"read":  &ReadTool{},

@@ -144,14 +144,14 @@ func (a *Agent) Run(ctx context.Context, userMessage string, cb func(CallbackMsg
 				} else {
 					res, err := tool.Execute(tc.Function.Arguments)
 					if err != nil {
-						result = fmt.Sprintf("Error: %v", err)
+						if res == "" {
+							result = fmt.Sprintf("Error: %v", err)
+						} else {
+							result = fmt.Sprintf("%s\nError: %v", res, err)
+						}
 						toolErr = err
 					} else {
 						result = res
-						if (tc.Function.Name == "bash" || tc.Function.Name == "powershell") &&
-							(strings.HasPrefix(result, "exit ") || strings.HasPrefix(result, "(timed out")) {
-							toolErr = fmt.Errorf("%s", strings.SplitN(result, "\n", 2)[0])
-						}
 					}
 				}
 
