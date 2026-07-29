@@ -259,6 +259,10 @@ func (m *model) handleEditingKey(msg tea.KeyPressMsg) (cmds []tea.Cmd) {
 			m.cancelAgent()
 		}
 		return cmds
+	case "ctrl+l":
+		m.editor.Reset()
+		m.palette.UpdateFilter("")
+		return cmds
 	case "enter":
 		if cmd := m.submitInput(); cmd != nil {
 			cmds = append(cmds, cmd...)
