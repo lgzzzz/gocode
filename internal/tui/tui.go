@@ -55,7 +55,8 @@ func NewModel(ag *agent.Agent, st *store.Store) tea.Model {
 	ta := textarea.New()
 	ta.KeyMap.InsertNewline = key.NewBinding(key.WithKeys("shift+tab"), key.WithHelp("shift+tab", "insert new line"))
 	ta.ShowLineNumbers = false // 隐藏行号
-	ta.CharLimit = -1          // 无字符限制
+	ta.CharLimit = 0
+	ta.MaxHeight = 0
 	ta.SetVirtualCursor(false) // 使用真实光标（支持闪烁）
 	ta.DynamicHeight = true    // 动态高度（自动根据内容调整）
 	styles := ta.Styles()
