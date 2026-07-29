@@ -29,9 +29,6 @@ func runShellCommand(command string, timeoutSec int, toolName string, buildCmd f
 			result = result[:10000] + "\n... [truncated]"
 		}
 		if err != nil {
-			if strings.Contains(result, "password") || strings.Contains(result, "密码") {
-				err = fmt.Errorf("%v\nThe command requires a password. Please prompt the user to execute it manually.", err)
-			}
 			return result, err
 		}
 		if result == "" {
