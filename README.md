@@ -2,7 +2,7 @@
 
 交互式终端 AI 编码助手。
 
-> [English Version](README.en.md)
+> [English Version](README.en.md) | [更新计划](ROADMAP.md)
 
 ---
 
@@ -28,7 +28,7 @@ go build -o gocode ./cmd/gocode.go
 ```bash
 # 设置 API Key
 # Linux/macOS
-export DEEPSEEK_API_KEY=sk-your-api-key-here
+
 
 # Windows (PowerShell)
 $env:DEEPSEEK_API_KEY = "sk-your-api-key-here"

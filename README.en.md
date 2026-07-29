@@ -2,7 +2,7 @@
 
 Interactive terminal-based AI coding assistant.
 
-> [中文版本](README.md)
+> [中文版本](README.md) | [Roadmap](ROADMAP.md)
 
 ---
 
