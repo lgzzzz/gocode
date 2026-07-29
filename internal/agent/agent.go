@@ -147,7 +147,7 @@ func (a *Agent) Run(ctx context.Context, userMessage string, cb func(CallbackMsg
 						if res == "" {
 							result = fmt.Sprintf("Error: %v", err)
 						} else {
-							result = fmt.Sprintf("%s\nError: %v", res, err)
+							result = fmt.Sprintf("Error: %v\n%s", err, res)
 						}
 						toolErr = err
 					} else {
