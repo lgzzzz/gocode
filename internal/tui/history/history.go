@@ -4,6 +4,7 @@ import (
 	"sync"
 
 	"github.com/lgzzzz/gocode/internal/tui/compoent"
+	goopenai "github.com/sashabaranov/go-openai"
 )
 
 type History struct {
@@ -90,6 +91,17 @@ func (h *History) Clear() {
 	defer h.mu.Unlock()
 	h.items = nil
 	h.dirty = true
+}
+
+func (h *History) LastAssistantContent() string {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for i := len(h.items) - 1; i >= 0; i-- {
+		if h.items[i].Type() == goopenai.ChatMessageRoleAssistant {
+			return h.items[i].Content()
+		}
+	}
+	return ""
 }
 
 func (h *History) MarkDirty() {

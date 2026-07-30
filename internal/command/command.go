@@ -26,6 +26,7 @@ type TUIAccess interface {
 	RollbackTracker() *tools.RollbackTracker
 	RollbackConversation() (rollBacked bool)
 	SetSkipAgentsMD(skip bool)
+	LastAssistantContent() string
 }
 
 type Result struct {

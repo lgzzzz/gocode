@@ -118,6 +118,10 @@ func (m *model) RollbackConversation() (rollBacked bool) {
 	return false
 }
 
+func (m *model) LastAssistantContent() string {
+	return m.history.LastAssistantContent()
+}
+
 func (m *model) cancelAgent() {
 	c := m.getCancel()
 	if c != nil {
