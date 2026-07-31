@@ -18,7 +18,10 @@ func main() {
 		os.Exit(1)
 	}
 
-	model := "deepseek-v4-pro"
+	model := os.Getenv("DEEPSEEK_MODEL")
+	if model == "" {
+		model = "deepseek-v4-pro"
+	}
 	baseURL := "https://api.deepseek.com"
 
 	st, err := store.Open("")

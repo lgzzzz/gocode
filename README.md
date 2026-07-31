@@ -26,12 +26,14 @@ go build -o gocode ./cmd/gocode.go
 ## 运行
 
 ```bash
-# 设置 API Key
+# 设置 API Key 和 Model
 # Linux/macOS
-
+export DEEPSEEK_API_KEY=sk-your-api-key-here
+export DEEPSEEK_MODEL=deepseek-v4-pro   # 可选，默认 deepseek-v4-pro
 
 # Windows (PowerShell)
 $env:DEEPSEEK_API_KEY = "sk-your-api-key-here"
+$env:DEEPSEEK_MODEL = "deepseek-v4-pro" # 可选，默认 deepseek-v4-pro
 
 # 启动
 gocode
