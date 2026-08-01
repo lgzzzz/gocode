@@ -34,7 +34,7 @@ func (t *PowershellTool) Execute(argsJSON string) (string, error) {
 
 func buildWindowsShellCmd(command string) *exec.Cmd {
 	if _, err := exec.LookPath("powershell.exe"); err == nil {
-		wrappedCmd := "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; " + command
+		wrappedCmd := "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $PSDefaultParameterValues['*:Encoding'] = 'UTF8'; " + command
 		return exec.Command("powershell", "-NoProfile", "-NonInteractive", "-Command", wrappedCmd)
 	}
 	return exec.Command("cmd", "/c", command)
