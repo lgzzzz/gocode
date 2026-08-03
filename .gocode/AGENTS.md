@@ -25,6 +25,7 @@ gocode/
 │   │   ├── new.go             # /new  — start a new conversation
 │   │   ├── prompt.go          # /prompt — display the current system prompt
 │   │   ├── rollback.go        # /rollback — revert file changes from the last interaction
+│   │   ├── commit.go          # /commit — commit all code via the agent tool loop
 │   │   ├── sessions.go        # /sessions — browse and continue previous sessions
 │   │   └── update.go          # /update — update AGENTS.md from recent project changes
 │   ├── store/
@@ -164,7 +165,7 @@ Provides the tools the agent can use:
 Built with Bubble Tea v2 + Bubbles v2. The TUI consists of:
 - **Output area** (viewport): Scrollable message history with distinct styles for user, assistant, thinking, tool calls/results, errors, and system messages.
 - **Input area** (textarea): Multi-line text input with dynamic height (max 17 lines).
-- **Command palette:** Activated by typing `/`; provides autocomplete for slash commands (`/new`, `/init`, `/update`, `/sessions`, `/prompt`, `/rollback`).
+- **Command palette:** Activated by typing `/`; provides autocomplete for slash commands (`/new`, `/init`, `/update`, `/commit`, `/sessions`, `/prompt`, `/rollback`).
 - **Session browser:** Modal list for browsing and resuming previous sessions.
 - **Markdown rendering:** Uses Glamour v2 for rich Markdown output. The `markdown` package provides a streaming-optimized cached renderer that incrementally re-renders only the changed tail of streaming content, using safe split-point detection (blank lines, unclosed fences).
 - **ANSI utilities:** The `util` package provides helpers for trimming invisible/empty lines from ANSI-styled strings.
@@ -179,6 +180,7 @@ Commands are registered in a `Registry` and invoked via the command palette or b
 | `/new`       | Start a fresh conversation (clears context)                  |
 | `/init`      | Analyze the project and generate `.gocode/AGENTS.md`         |
 | `/update`    | Analyze recent project changes and update `.gocode/AGENTS.md` |
+| `/commit`    | Commit all code via the agent tool loop (no push, history kept) |
 | `/sessions`  | Open the session browser to continue a previous session      |
 | `/prompt`    | Display the current system prompt (for debugging)            |
 | `/rollback`  | Revert file changes and conversation context from the last agent interaction |
